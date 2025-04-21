@@ -4,17 +4,23 @@
   <meta charset="UTF-8">
   <title>Úprava směn</title>
   <style>
-    body { font-family: sans-serif; padding: 20px; }
+    body {
+      font-family: sans-serif;
+      padding: 20px;
+    }
+
     nav {
       background-color: #0057a0;
       padding: 10px;
       margin: -20px -20px 20px -20px;
     }
+
     nav a {
       color: white;
       margin-right: 20px;
       text-decoration: none;
     }
+
     .smena-box {
       border: 1px solid #ccc;
       border-radius: 10px;
@@ -22,18 +28,26 @@
       margin-bottom: 20px;
       background-color: #e9f3ff;
     }
+
     .pacient-row {
       margin-top: 10px;
     }
+
     select, input[type="time"], input[type="text"], button {
       margin: 5px;
       padding: 5px;
       font-size: 16px;
     }
-    .historie-title {
-      margin-top: 40px;
-      font-size: 20px;
-      color: #333;
+
+    .historie {
+      background-color: #f2f2f2;
+      margin-top: 50px;
+      padding: 20px;
+      border-radius: 10px;
+    }
+
+    .historie h3 {
+      color: #666;
     }
   </style>
 </head>
@@ -47,9 +61,10 @@
 
   <h2>Úprava směn</h2>
   <div id="smenyContainer"></div>
-
-  <h2 class="historie-title">Historie směn</h2>
-  <div id="historieContainer"></div>
+  <div class="historie">
+    <h3>Historie směn</h3>
+    <div id="historieContainer"></div>
+  </div>
 
   <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-auth-compat.js"></script>
@@ -62,7 +77,8 @@
       projectId: "dochazka-app",
       storageBucket: "dochazka-app.appspot.com",
       messagingSenderId: "912220280247",
-      appId: "1:912220280247:web:e0b27491b9234cba984432"
+      appId: "1:912220280247:web:e0b27491b9234cba984432",
+      measurementId: "G-G8PPKTK907"
     };
 
     firebase.initializeApp(firebaseConfig);
@@ -70,7 +86,7 @@
     const auth = firebase.auth();
 
     const pacienti = ["Paseková", "Dragoun", "Žáková", "Chmarníková", "Drbohlavová"];
-    const dnes = "2025-04-21";
+    const dnes = new Date().toISOString().split("T")[0];
 
     auth.onAuthStateChanged(user => {
       if (!user) {
@@ -79,54 +95,49 @@
         return;
       }
 
-      const smenyContainer = document.getElementById("smenyContainer");
-      const historieContainer = document.getElementById("historieContainer");
+      const aktivniBox = document.getElementById("smenyContainer");
+      const historieBox = document.getElementById("historieContainer");
 
       db.collection("smeny").orderBy("od").get().then(snapshot => {
         snapshot.forEach(doc => {
           const smena = doc.data();
-          const box = vytvorSmenaBox(doc.id, smena);
-          if (smena.od >= dnes) {
-            smenyContainer.appendChild(box);
-          } else {
-            historieContainer.appendChild(box);
+          const smenaBox = document.createElement("div");
+          smenaBox.className = "smena-box";
+
+          const nadpis = document.createElement('h3');
+          nadpis.innerHTML = `${smena.od} (<strong>${smena.email}</strong>)`;
+          smenaBox.appendChild(nadpis);
+
+          const pacientiDiv = document.createElement("div");
+
+          if (Array.isArray(smena.pacienti)) {
+            smena.pacienti.forEach((pacient, index) => {
+              pacientiDiv.appendChild(
+                vytvorPacientRadek(doc.id, index, pacient.jmeno, pacient.cas, pacient.komentar, smena.od <= dnes)
+              );
+            });
           }
+
+          if (smena.od > dnes) {
+            const pridejBtn = document.createElement("button");
+            pridejBtn.textContent = "Přidat pacienta";
+            pridejBtn.addEventListener("click", () => {
+              pacientiDiv.appendChild(
+                vytvorPacientRadek(doc.id, pacientiDiv.childElementCount, "", "", "", false)
+              );
+            });
+            smenaBox.appendChild(pridejBtn);
+            aktivniBox.appendChild(smenaBox);
+          } else {
+            historieBox.appendChild(smenaBox);
+          }
+
+          smenaBox.appendChild(pacientiDiv);
         });
       });
     });
 
-    function vytvorSmenaBox(docId, smena) {
-      const smenaBox = document.createElement("div");
-      smenaBox.className = "smena-box";
-
-      const nadpis = document.createElement('h3');
-      nadpis.innerHTML = `${smena.od} (<strong>${smena.email}</strong>)`;
-      smenaBox.appendChild(nadpis);
-
-      const pacientiDiv = document.createElement("div");
-
-      if (Array.isArray(smena.pacienti)) {
-        smena.pacienti.forEach((pacient, index) => {
-          pacientiDiv.appendChild(vytvorPacientRadek(docId, index, pacient.jmeno, pacient.cas, pacient.komentar, smena.od >= dnes));
-        });
-      }
-
-      if (smena.od >= dnes) {
-        const pridejBtn = document.createElement("button");
-        pridejBtn.textContent = "Přidat pacienta";
-        pridejBtn.addEventListener("click", () => {
-          pacientiDiv.appendChild(vytvorPacientRadek(docId, pacientiDiv.childElementCount, "", "", "", true));
-        });
-        smenaBox.appendChild(pacientiDiv);
-        smenaBox.appendChild(pridejBtn);
-      } else {
-        smenaBox.appendChild(pacientiDiv);
-      }
-
-      return smenaBox;
-    }
-
-    function vytvorPacientRadek(docId, index, vychoziJmeno = "", vychoziCas = "", vychoziKomentar = "", editovatelne = true) {
+    function vytvorPacientRadek(docId, index, vychoziJmeno = "", vychoziCas = "", vychoziKomentar = "", zamknuto = false) {
       const row = document.createElement("div");
       row.className = "pacient-row";
 
@@ -138,32 +149,70 @@
         if (jmeno === vychoziJmeno) option.selected = true;
         select.appendChild(option);
       });
-      select.disabled = !editovatelne;
 
       const time = document.createElement("input");
       time.type = "time";
       time.value = vychoziCas;
-      time.disabled = !editovatelne;
 
       const komentar = document.createElement("input");
       komentar.type = "text";
       komentar.placeholder = "Komentář";
       komentar.value = vychoziKomentar;
-      komentar.disabled = !editovatelne;
+
+      const ulozit = document.createElement("button");
+      ulozit.textContent = "Uložit";
+
+      const upravit = document.createElement("button");
+      upravit.textContent = "Upravit";
+      upravit.style.display = "none";
+
+      const smazat = document.createElement("button");
+      smazat.textContent = "Smazat";
+      smazat.style.backgroundColor = "#f55";
+
+      // Zámek
+      if (zamknuto) zamkni();
+
+      ulozit.addEventListener("click", () => {
+        ulozPacient(docId, index, select.value, time.value, komentar.value);
+        zamkni();
+      });
+
+      upravit.addEventListener("click", () => {
+        select.disabled = false;
+        time.disabled = false;
+        komentar.disabled = false;
+        ulozit.style.display = "inline";
+        upravit.style.display = "none";
+      });
+
+      smazat.addEventListener("click", () => {
+        if (!confirm("Opravdu smazat tohoto pacienta?")) return;
+        db.collection("smeny").doc(docId).get().then(doc => {
+          if (!doc.exists) return;
+          let data = doc.data();
+          if (!Array.isArray(data.pacienti)) return;
+
+          data.pacienti.splice(index, 1);
+          db.collection("smeny").doc(docId).update({ pacienti: data.pacienti })
+            .then(() => location.reload());
+        });
+      });
+
+      function zamkni() {
+        select.disabled = true;
+        time.disabled = true;
+        komentar.disabled = true;
+        ulozit.style.display = "none";
+        upravit.style.display = "inline";
+      }
 
       row.appendChild(select);
       row.appendChild(time);
       row.appendChild(komentar);
-
-      if (editovatelne) {
-        const ulozit = document.createElement("button");
-        ulozit.textContent = "Uložit";
-        ulozit.addEventListener("click", () => {
-          ulozPacient(docId, index, select.value, time.value, komentar.value);
-        });
-        row.appendChild(ulozit);
-      }
-
+      row.appendChild(ulozit);
+      row.appendChild(upravit);
+      row.appendChild(smazat);
       return row;
     }
 
@@ -171,14 +220,12 @@
       const docRef = db.collection("smeny").doc(docId);
       docRef.get().then(doc => {
         if (!doc.exists) return;
-
         let data = doc.data();
         if (!Array.isArray(data.pacienti)) data.pacienti = [];
 
         data.pacienti[index] = { jmeno, cas, komentar };
         docRef.update({ pacienti: data.pacienti })
-          .then(() => alert("Uloženo"))
-          .catch(err => alert("Chyba při ukládání: " + err));
+          .then(() => console.log("Uloženo"));
       });
     }
   </script>
