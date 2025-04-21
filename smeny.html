@@ -2,59 +2,48 @@
 <html lang="cs">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Úprava směn</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     body {
       font-family: sans-serif;
       padding: 20px;
     }
-
     nav {
       background-color: #0057a0;
       padding: 10px;
       margin: -20px -20px 20px -20px;
     }
-
     nav a {
       color: white;
       margin-right: 20px;
       text-decoration: none;
     }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 20px;
+    .smena-box {
+      background-color: #e8f0fe;
+      padding: 15px;
+      margin-bottom: 20px;
+      border-radius: 8px;
     }
-
-    th, td {
-      border: 1px solid #ccc;
-      padding: 8px;
-      text-align: left;
-    }
-
-    .barva-sestra-test {
-      background-color: #007bff22;
-    }
-
-    .barva-druhasestra-test {
-      background-color: #6f42c122;
-    }
-
-    .barva-treti-test {
-      background-color: #20c99722;
-    }
-
-    .pacient-form {
+    .smena-header {
+      font-weight: bold;
       margin-bottom: 10px;
-      background: #f5f5f5;
-      padding: 10px;
-      border-radius: 6px;
     }
-
-    .pacient-form input, .pacient-form select {
-      margin-right: 10px;
+    .pacient-radek {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    select, input[type="time"], input[type="text"] {
+      padding: 6px;
+      font-size: 14px;
+    }
+    button {
+      padding: 6px 10px;
+      font-size: 14px;
+      cursor: pointer;
     }
   </style>
 </head>
@@ -70,8 +59,8 @@
   <div id="smenyContainer"></div>
 
   <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore-compat.js"></script>
 
   <script>
     const firebaseConfig = {
@@ -80,109 +69,15 @@
       projectId: "dochazka-app",
       storageBucket: "dochazka-app.appspot.com",
       messagingSenderId: "912220280247",
-      appId: "1:912220280247:web:e0b27491b9234cba984432",
-      measurementId: "G-G8PPKTK907"
+      appId: "1:912220280247:web:e0b27491b9234cba984432"
     };
 
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
     const auth = firebase.auth();
 
-    const pacientiSeznam = [
-      "Paseková", "Dragoun", "Žáková", "Chmarníková", "Drbohlavová"
-    ];
-
-    function vytvorRadek(pacient, cas, komentar) {
-      return `<p><strong>${pacient}</strong> – ${cas} – ${komentar}</p>`;
-    }
-
-    function renderujSmeny(smeny) {
-      const container = document.getElementById("smenyContainer");
-      container.innerHTML = "";
-
-      smeny.forEach(smena => {
-        const barvaClass = smena.email === "sestra@test.cz"
-          ? "barva-sestra-test"
-          : smena.email === "druhasestra@test.cz"
-          ? "barva-druhasestra-test"
-          : "barva-treti-test";
-
-        const div = document.createElement("div");
-        div.className = barvaClass;
-        div.style.marginBottom = "20px";
-        div.style.padding = "10px";
-        div.style.border = "1px solid #ccc";
-
-        div.innerHTML = `
-          <h4>${smena.od} – ${smena.do} (${smena.email})</h4>
-          <div id="pacienti-${smena.id}">
-            ${smena.pacienti.map(p => vytvorRadek(p.jmeno, p.cas, p.komentar)).join("")}
-          </div>
-          <div class="pacient-form">
-            <select id="jmeno-${smena.id}">
-              ${pacientiSeznam.map(j => `<option value="${j}">${j}</option>`).join("")}
-              <option value="vlastni">Jiné (ručně)</option>
-            </select>
-            <input type="text" placeholder="Jméno (volitelně)" id="vlastni-${smena.id}" style="display:none;">
-            <input type="time" id="cas-${smena.id}" required>
-            <input type="text" placeholder="Komentář" id="komentar-${smena.id}">
-            <button onclick="pridatPacienta('${smena.id}')">Přidat pacienta</button>
-          </div>
-        `;
-
-        container.appendChild(div);
-
-        document.getElementById(`jmeno-${smena.id}`).addEventListener("change", e => {
-          const zobrazit = e.target.value === "vlastni";
-          document.getElementById(`vlastni-${smena.id}`).style.display = zobrazit ? "inline-block" : "none";
-        });
-      });
-    }
-
-    async function pridatPacienta(smenaId) {
-      const select = document.getElementById(`jmeno-${smenaId}`);
-      const vlastniInput = document.getElementById(`vlastni-${smenaId}`);
-      const casInput = document.getElementById(`cas-${smenaId}`);
-      const komentarInput = document.getElementById(`komentar-${smenaId}`);
-
-      const jmeno = select.value === "vlastni" ? vlastniInput.value.trim() : select.value;
-      const cas = casInput.value;
-      const komentar = komentarInput.value;
-
-      if (!jmeno || !cas) {
-        alert("Vyplň jméno a čas.");
-        return;
-      }
-
-      const smenaRef = db.collection("smeny").doc(smenaId);
-      const docSnap = await smenaRef.get();
-      const data = docSnap.data();
-
-      const aktualni = data.pacienti || [];
-      aktualni.push({ jmeno, cas, komentar });
-
-      await smenaRef.update({ pacienti: aktualni });
-      nactiSmeny();
-    }
-
-    async function nactiSmeny() {
-      const snapshot = await db.collection("smeny").get();
-      const smeny = [];
-      snapshot.forEach(doc => {
-        const d = doc.data();
-        smeny.push({
-          id: doc.id,
-          email: d.email,
-          od: d.od,
-          do: d.do,
-          pacienti: d.pacienti || []
-        });
-      });
-
-      // Seřazení podle data směny
-      smeny.sort((a, b) => a.od.localeCompare(b.od));
-      renderujSmeny(smeny);
-    }
+    const pacienti = ["Paseková", "Dragoun", "Žáková", "Chmarníková", "Drbohlavová"];
+    const smenyContainer = document.getElementById("smenyContainer");
 
     auth.onAuthStateChanged(user => {
       if (user) {
@@ -192,6 +87,88 @@
         window.location.href = "index.html";
       }
     });
+
+    async function nactiSmeny() {
+      const snapshot = await db.collection("smeny").get();
+      let smeny = [];
+
+      snapshot.forEach(doc => {
+        const d = doc.data();
+        smeny.push({ id: doc.id, ...d });
+      });
+
+      smeny.sort((a, b) => new Date(a.od) - new Date(b.od));
+      smenyContainer.innerHTML = "";
+
+      smeny.forEach(smena => {
+        const box = document.createElement("div");
+        box.className = "smena-box";
+
+        const datumText = smena.od === smena.do ? smena.od : `${smena.od} – ${smena.do}`;
+        box.innerHTML = `<div class="smena-header">${datumText} (<b>${smena.email}</b>)</div>`;
+
+        const pacientiDiv = document.createElement("div");
+        pacientiDiv.id = `pacienti-${smena.id}`;
+
+        const radek = vytvorPacientRadek(smena.id, smena.pacienti || []);
+        pacientiDiv.appendChild(radek);
+
+        const btn = document.createElement("button");
+        btn.textContent = "Přidat pacienta";
+        btn.onclick = () => {
+          pacientiDiv.appendChild(vytvorPacientRadek(smena.id));
+        };
+
+        box.appendChild(pacientiDiv);
+        box.appendChild(btn);
+        smenyContainer.appendChild(box);
+      });
+    }
+
+    function vytvorPacientRadek(smenaId, data = {}) {
+      const radek = document.createElement("div");
+      radek.className = "pacient-radek";
+
+      const select = document.createElement("select");
+      select.innerHTML = `<option value="">— vybrat —</option>` +
+        pacienti.map(jmeno => `<option value="${jmeno}" ${data.jmeno === jmeno ? "selected" : ""}>${jmeno}</option>`).join("");
+
+      const casInput = document.createElement("input");
+      casInput.type = "time";
+      casInput.value = data.cas || "";
+
+      const koment = document.createElement("input");
+      koment.type = "text";
+      koment.placeholder = "Komentář";
+      koment.value = data.komentar || "";
+
+      const ulozBtn = document.createElement("button");
+      ulozBtn.textContent = "Uložit";
+      ulozBtn.onclick = async () => {
+        const jmeno = select.value;
+        const cas = casInput.value;
+        const komentar = koment.value;
+
+        if (!jmeno || !cas) {
+          alert("Vyplňte prosím pacienta i čas.");
+          return;
+        }
+
+        const docRef = db.collection("smeny").doc(smenaId);
+        const docSnap = await docRef.get();
+        const data = docSnap.data();
+        const seznam = data.pacienti || [];
+        seznam.push({ jmeno, cas, komentar });
+        await docRef.update({ pacienti: seznam });
+        alert("Pacient přidán.");
+      };
+
+      radek.appendChild(select);
+      radek.appendChild(casInput);
+      radek.appendChild(koment);
+      radek.appendChild(ulozBtn);
+      return radek;
+    }
   </script>
 </body>
 </html>
