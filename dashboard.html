@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Moje směny a dovolená</title>
+  <link href="https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.min.css" rel="stylesheet" />
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 20px;
+    }
+
+    nav {
+      background-color: #0057a0;
+      padding: 10px;
+      margin: -20px -20px 20px -20px;
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+
+    nav a {
+      color: white;
+      margin-right: 20px;
+      text-decoration: none;
+    }
+
+    #calendar {
+      max-width: 100%;
+      margin: 0 auto;
+    }
+
+    .legend {
+      margin-top: 20px;
+    }
+
+    .legend-item {
+      display: inline-block;
+      margin-right: 15px;
+      padding: 5px 10px;
+      color: white;
+      border-radius: 4px;
+      font-size: 0.9em;
+    }
+
+    .green { background-color: green; }
+    .red { background-color: red; }
+    .gray { background-color: gray; }
+    .blue { background-color: #007bff; }
+    .purple { background-color: #6f42c1; }
+    .teal { background-color: #20c997; }
+    .yellow { background-color: #fff3cd; color: #333; }
+
+    #zadostForm {
+      margin-top: 20px;
+      padding: 15px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      max-width: 500px;
+    }
+
+    select, button {
+      padding: 10px;
+      font-size: 16px;
+      margin-top: 10px;
+    }
+
+    table {
+      width: 100%;
+      margin-top: 30px;
+      border-collapse: collapse;
+    }
+
+    th, td {
+      padding: 10px;
+      border: 1px solid #ccc;
+      text-align: left;
+    }
+  </style>
+</head>
+<body>
+  <nav id="navMenu"></nav>
+
+  <h2>Moje směny a dovolená</h2>
+  <div id="calendar"></div>
+
+  <!-- FORMULÁŘ PRO ZADÁNÍ VOLNA -->
+  <div id="zadostForm" style="display: none;">
+    <h3>Vybrané dny: <span id="rangeText"></span></h3>
+    <label for="typVolna">Typ volna:</label>
+    <select id="typVolna">
+      <option value="Dovolená">Dovolená</option>
+      <option value="Neplacené volno">Neplacené volno</option>
+    </select>
+    <br /><br />
+    <button id="potvrditZadostBtn">Potvrdit žádost</button>
+  </div>
+
+  <!-- LEGENDA -->
+  <div class="legend" id="legend">
+    <strong>Legenda:</strong><br />
+    <div class="legend-item green">Schválená dovolená</div>
+    <div class="legend-item red">Zamítnutá dovolená</div>
+    <div class="legend-item gray">Čeká na schválení</div>
+    <div class="legend-item yellow">Státní svátek</div>
+  </div>
+
+  <!-- TABULKA SMĚN POD KALENDÁŘEM -->
+  <div id="smenyTableContainer">
+    <h3>Detaily směn</h3>
+    <table id="smenyTable">
+      <thead>
+        <tr>
+          <th>Datum</th>
+          <th>Pacient</th>
+          <th>Čas</th>
+          <th>Komentář</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <!-- SCRIPTS -->
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.min.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore-compat.js"></script>
+
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyD4j1bO7JDbzUM-ca4AWUSkGYpmglWK_IQ",
+      authDomain: "dochazka-app.firebaseapp.com",
+      projectId: "dochazka-app",
+      storageBucket: "dochazka-app.appspot.com",
+      messagingSenderId: "912220280247",
+      appId: "1:912220280247:web:e0b27491b9234cba984432"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+    const auth = firebase.auth();
+
+    document.addEventListener("DOMContentLoaded", function () {
+      const calendarEl = document.getElementById("calendar");
+
+      auth.onAuthStateChanged(async user => {
+        if (!user) {
+          alert("Musíš být přihlášený.");
+          window.location.href = "index.html";
+          return;
+        }
+
+        const userEmail = user.email;
+        const isVedouci = userEmail === "vedouci@test.cz";
+
+        if (isVedouci) {
+          document.getElementById("navMenu").innerHTML = `
+            <a href="dashboard.html">Moje směny</a>
+            <a href="zadosti.html">Žádosti</a>
+            <a href="planovani.html">Plánování směn</a>
+            <a href="smeny.html">Úprava směn</a>
+          `;
+        }
+
+        let startDate = null;
+        let endDate = null;
+
+        const calendar = new FullCalendar.Calendar(calendarEl, {
+          initialView: "dayGridMonth",
+          height: "auto",
+          selectable: true,
+
+          select: function(info) {
+            startDate = info.startStr;
+            const end = new Date(info.end);
+            end.setDate(end.getDate() - 1);
+            endDate = end.toISOString().split("T")[0];
+
+            document.getElementById("rangeText").textContent = `${startDate} – ${endDate}`;
+            document.getElementById("zadostForm").style.display = "block";
+          },
+
+          events: async function(fetchInfo, successCallback) {
+            const events = [];
+
+            // SMĚNY
+            const smenySnap = await db.collection("smeny").where("email", "==", userEmail).get();
+            const tabulkaTelo = document.querySelector("#smenyTable tbody");
+            tabulkaTelo.innerHTML = "";
+            const radky = [];
+
+            smenySnap.forEach(doc => {
+              const d = doc.data();
+              const datum = d.od || "—";
+              const pacient = d.pacient || "";
+              const cas = d.cas || "";
+              const komentar = d.komentar || "";
+
+              radky.push({ datum, pacient, cas, komentar });
+
+              let color = "#007bff";
+              if (userEmail === "druhasestra@test.cz") color = "#6f42c1";
+              if (userEmail === "treti@test.cz") color = "#20c997";
+
+              events.push({
+                title: "Směna",
+                start: d.od,
+                end: new Date(new Date(d.do).getTime() + 86400000).toISOString().split("T")[0],
+                color: color
+              });
+            });
+
+            radky.sort((a, b) => a.datum.localeCompare(b.datum));
+            radky.forEach(r => {
+              const tr = document.createElement("tr");
+              tr.innerHTML = `<td>${r.datum}</td><td>${r.pacient}</td><td>${r.cas}</td><td>${r.komentar}</td>`;
+              tabulkaTelo.appendChild(tr);
+            });
+
+            // DOVOLENÁ
+            const dovolenaSnap = await db.collection("zadosti").where("email", "==", userEmail).get();
+            dovolenaSnap.forEach(doc => {
+              const d = doc.data();
+              let color = d.stav === "schváleno" ? "green" : d.stav === "zamítnuto" ? "red" : "gray";
+              events.push({
+                title: "Dovolená",
+                start: d.od,
+                end: new Date(new Date(d.do).getTime() + 86400000).toISOString().split("T")[0],
+                color: color
+              });
+            });
+
+            // SVÁTKY
+            const year = new Date().getFullYear();
+            try {
+              const holidays = await fetch(`https://date.nager.at/api/v3/PublicHolidays/${year}/CZ`).then(res => res.json());
+              holidays.forEach(holiday => {
+                events.push({
+                  title: holiday.localName,
+                  start: holiday.date,
+                  color: "#fff3cd",
+                  textColor: "#333"
+                });
+              });
+            } catch (e) {
+              console.error("Chyba při načítání svátků:", e);
+            }
+
+            successCallback(events);
+
+            // LEGENDU PŘIDAT PODLE EMAILU
+            const legend = document.getElementById("legend");
+            const smenaLabel = document.createElement("div");
+            smenaLabel.classList.add("legend-item");
+
+            if (userEmail === "druhasestra@test.cz") smenaLabel.classList.add("purple");
+            else if (userEmail === "treti@test.cz") smenaLabel.classList.add("teal");
+            else smenaLabel.classList.add("blue");
+
+            smenaLabel.textContent = `Směna – ${userEmail}`;
+            legend.appendChild(smenaLabel);
+          }
+        });
+
+        calendar.render();
+
+        document.getElementById("potvrditZadostBtn").addEventListener("click", async () => {
+          const typ = document.getElementById("typVolna").value;
+          await db.collection("zadosti").add({
+            email: userEmail,
+            od: startDate,
+            do: endDate,
+            typ: typ,
+            stav: "čeká"
+          });
+
+          alert("Žádost o volno byla odeslána.");
+          document.getElementById("zadostForm").style.display = "none";
+          calendar.refetchEvents();
+        });
+      });
+    });
+  </script>
+</body>
+</html>

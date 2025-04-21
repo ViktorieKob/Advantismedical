@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8" />
+  <title>Úprava směn</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 20px;
+    }
+
+    nav {
+      background-color: #0057a0;
+      padding: 10px;
+      margin: -20px -20px 20px -20px;
+    }
+
+    nav a {
+      color: white;
+      margin-right: 20px;
+      text-decoration: none;
+    }
+
+    .table-wrapper {
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+      min-width: 600px;
+    }
+
+    th, td {
+      padding: 10px;
+      border: 1px solid #ccc;
+      text-align: center;
+    }
+
+    select, input[type="time"], textarea {
+      padding: 6px;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <nav>
+    <a href="dashboard.html">Moje směny</a>
+    <a href="zadosti.html">Žádosti</a>
+    <a href="planovani.html">Plánování směn</a>
+    <a href="smeny.html">Úprava směn</a>
+  </nav>
+
+  <h2>Úprava směn</h2>
+  <div class="table-wrapper">
+    <table id="smenyTable">
+      <thead>
+        <tr>
+          <th>Datum</th>
+          <th>Email sestry</th>
+          <th>Pacient</th>
+          <th>Čas nástupu</th>
+          <th>Komentář</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore-compat.js"></script>
+
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyD4j1bO7JDbzUM-ca4AWUSkGYpmglWK_IQ",
+      authDomain: "dochazka-app.firebaseapp.com",
+      projectId: "dochazka-app",
+      storageBucket: "dochazka-app.appspot.com",
+      messagingSenderId: "912220280247",
+      appId: "1:912220280247:web:e0b27491b9234cba984432"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+    const auth = firebase.auth();
+
+    const pacienti = ["Paseková", "Dragoun", "Žáková", "Chmarníková", "Drbohlavová"];
+    const tbody = document.querySelector("#smenyTable tbody");
+
+    auth.onAuthStateChanged(user => {
+      if (user) {
+        nactiSmeny();
+      } else {
+        alert("Přístup pouze pro přihlášené uživatele.");
+        window.location.href = "index.html";
+      }
+    });
+
+    async function nactiSmeny() {
+      const snapshot = await db.collection("smeny").get();
+      const smeny = [];
+
+      snapshot.forEach(doc => {
+        const d = doc.data();
+        smeny.push({ id: doc.id, ...d });
+      });
+
+      smeny.sort((a, b) => new Date(a.od) - new Date(b.od));
+
+      tbody.innerHTML = "";
+      smeny.forEach(smena => {
+        const tr = document.createElement("tr");
+
+        const barva = smena.email === "sestra@test.cz" ? "#007bff"
+                    : smena.email === "druhasestra@test.cz" ? "#6f42c1"
+                    : smena.email === "treti@test.cz" ? "#20c997"
+                    : "#ccc";
+
+        tr.style.backgroundColor = barva;
+        tr.innerHTML = `
+          <td>${smena.od}</td>
+          <td>${smena.email}</td>
+          <td>
+            <select onchange="aktualizujSmenu('${smena.id}', 'pacient', this.value)">
+              <option value="">— vybrat —</option>
+              ${pacienti.map(jmeno => `
+                <option value="${jmeno}" ${smena.pacient === jmeno ? 'selected' : ''}>${jmeno}</option>
+              `).join("")}
+            </select>
+          </td>
+          <td>
+            <input type="time" value="${smena.cas || ''}" onchange="aktualizujSmenu('${smena.id}', 'cas', this.value)">
+          </td>
+          <td>
+            <textarea rows="1" onchange="aktualizujSmenu('${smena.id}', 'komentar', this.value)">${smena.komentar || ''}</textarea>
+          </td>
+        `;
+
+        tbody.appendChild(tr);
+      });
+    }
+
+    function aktualizujSmenu(id, pole, hodnota) {
+      const update = {};
+      update[pole] = hodnota;
+      db.collection("smeny").doc(id).update(update);
+    }
+  </script>
+</body>
+</html>
