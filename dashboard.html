@@ -1,72 +1,49 @@
 <!DOCTYPE html>
 <html lang="cs">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8">
   <title>Dashboard</title>
-  <link href="https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.min.css" rel="stylesheet" />
+  <link href='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.9/index.global.min.css' rel='stylesheet' />
+  <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.9/index.global.min.js'></script>
   <style>
-    body { font-family: sans-serif; padding: 20px; }
-
+    body {
+      font-family: sans-serif;
+      padding: 20px;
+    }
     nav {
       background-color: #0057a0;
       padding: 10px;
       margin: -20px -20px 20px -20px;
     }
-
     nav a {
       color: white;
       margin-right: 20px;
       text-decoration: none;
     }
-
     #calendar {
       max-width: 900px;
-      margin: 0 auto 30px;
+      margin: 0 auto 40px auto;
     }
-
-    .tabulka-pacientu {
-      max-width: 900px;
-      margin: 0 auto;
-    }
-
-    .smena-den {
-      margin-bottom: 20px;
-      background-color: #f1f1f1;
-      padding: 15px;
-      border-radius: 8px;
-    }
-
-    .smena-den h3 {
-      margin: 0 0 10px;
-      color: #0057a0;
-    }
-
-    .smena-den ul {
-      list-style: none;
-      padding: 0;
-      margin: 0;
-    }
-
-    .smena-den li {
-      margin-bottom: 5px;
+    .den-box {
+      background-color: #f0f0f0;
+      padding: 10px;
+      margin-bottom: 10px;
+      border-left: 4px solid #0057a0;
     }
   </style>
 </head>
 <body>
-  <nav id="menu" style="display: none;">
+  <nav id="navigace" style="display: none;">
     <a href="dashboard.html">Moje směny</a>
     <a href="zadosti.html">Žádosti</a>
     <a href="planovani.html">Plánování směn</a>
     <a href="smeny.html">Úprava směn</a>
   </nav>
 
-  <h2>Dashboard</h2>
-  <div id="calendar"></div>
+  <h2 id="uvod">Dashboard</h2>
+  <div id='calendar'></div>
+  <div id="prehled"></div>
 
-  <div class="tabulka-pacientu" id="pacientiBox"></div>
-
-  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.min.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore-compat.js"></script>
@@ -78,84 +55,89 @@
       projectId: "dochazka-app",
       storageBucket: "dochazka-app.appspot.com",
       messagingSenderId: "912220280247",
-      appId: "1:912220280247:web:e0b27491b9234cba984432",
-      measurementId: "G-G8PPKTK907"
+      appId: "1:912220280247:web:e0b27491b9234cba984432"
     };
 
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
     const auth = firebase.auth();
 
-    let calendar;
-
-    auth.onAuthStateChanged(async (user) => {
+    auth.onAuthStateChanged(user => {
       if (!user) {
-        alert("Musíš být přihlášený.");
+        alert("Musíte být přihlášeni.");
         window.location.href = "index.html";
         return;
       }
 
-      const emailUzivatele = user.email;
-      if (emailUzivatele === "vedouci@test.cz") {
-        document.getElementById("menu").style.display = "block";
+      const currentUser = user.email;
+      if (currentUser === "vedouci@test.cz") {
+        document.getElementById("navigace").style.display = "block";
       }
 
-      const calendarEl = document.getElementById("calendar");
-      calendar = new FullCalendar.Calendar(calendarEl, {
-        initialView: "dayGridMonth",
-        selectable: false,
-        events: async (fetchInfo, successCallback) => {
-          const events = [];
-          const smenySnap = await db.collection("smeny").get();
-          smenySnap.forEach(doc => {
-            const d = doc.data();
-            if (d.email === emailUzivatele) {
-              events.push({
-                title: "Směna",
-                start: d.od,
-                end: new Date(new Date(d.do).getTime() + 86400000).toISOString().split('T')[0],
-                color: "#007bff"
-              });
-            }
-          });
+      zobrazUdalosti(currentUser);
+    });
 
-          const volnoSnap = await db.collection("zadosti").get();
-          volnoSnap.forEach(doc => {
-            const d = doc.data();
-            if (d.email === emailUzivatele) {
-              const barva = d.stav === "schváleno" ? "green" : d.stav === "zamítnuto" ? "red" : "#999";
-              events.push({
-                title: `${d.typ}`,
-                start: d.od,
-                end: new Date(new Date(d.do).getTime() + 86400000).toISOString().split('T')[0],
-                color: barva
-              });
-            }
-          });
+    function zobrazUdalosti(uzivatel) {
+      const calendarEl = document.getElementById('calendar');
+      const prehled = document.getElementById('prehled');
 
-          successCallback(events);
-        }
+      const calendar = new FullCalendar.Calendar(calendarEl, {
+        initialView: 'dayGridMonth',
+        locale: 'cs',
+        firstDay: 1,
+        headerToolbar: {
+          left: 'title',
+          center: '',
+          right: 'today prev,next'
+        },
+        events: []
       });
-
       calendar.render();
 
-      // Vykreslení tabulky s pacienty
-      const pacientiBox = document.getElementById("pacientiBox");
-      const smenySnapshot = await db.collection("smeny").orderBy("od").get();
-      pacientiBox.innerHTML = "";
+      db.collection("smeny").orderBy("od").get().then(snapshot => {
+        const dny = {};
 
-      smenySnapshot.forEach(doc => {
-        const data = doc.data();
-        if (data.email === emailUzivatele && Array.isArray(data.pacienti) && data.pacienti.length > 0) {
-          const smenaDiv = document.createElement("div");
-          smenaDiv.className = "smena-den";
+        snapshot.forEach(doc => {
+          const smena = doc.data();
+          const datum = smena.od;
+          const email = smena.email;
 
-          const datum = new Date(data.od).toLocaleDateString("cs-CZ");
-          smenaDiv.innerHTML = `<h3>${datum}</h3><ul>${data.pacienti.map(p => `<li>${p.jmeno} – ${p.cas} – ${p.komentar}</li>`).join("")}</ul>`;
-          pacientiBox.appendChild(smenaDiv);
+          if (email !== uzivatel && uzivatel !== "vedouci@test.cz") return;
+
+          calendar.addEvent({
+            title: "Směna",
+            start: datum,
+            allDay: true
+          });
+
+          if (!dny[datum]) dny[datum] = [];
+          if (Array.isArray(smena.pacienti)) {
+            smena.pacienti.forEach(p => {
+              if (p && p.jmeno && p.cas) {
+                dny[datum].push(`${p.jmeno} – ${p.cas} – ${p.komentar || ""}`);
+              }
+            });
+          }
+        });
+
+        for (const datum in dny) {
+          const box = document.createElement("div");
+          box.className = "den-box";
+
+          const nazev = document.createElement("h4");
+          nazev.textContent = datum.split("-").reverse().join(". ") + ".";
+          box.appendChild(nazev);
+
+          dny[datum].forEach(text => {
+            const p = document.createElement("p");
+            p.textContent = text;
+            box.appendChild(p);
+          });
+
+          prehled.appendChild(box);
         }
       });
-    });
+    }
   </script>
 </body>
 </html>
