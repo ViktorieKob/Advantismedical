@@ -1,49 +1,42 @@
 <!DOCTYPE html>
 <html lang="cs">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8">
   <title>Úprava směn</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     body {
       font-family: sans-serif;
       padding: 20px;
     }
+
     nav {
       background-color: #0057a0;
       padding: 10px;
       margin: -20px -20px 20px -20px;
     }
+
     nav a {
       color: white;
       margin-right: 20px;
       text-decoration: none;
     }
+
     .smena-box {
-      background-color: #e8f0fe;
-      padding: 15px;
+      border: 1px solid #ccc;
+      border-radius: 10px;
+      padding: 20px;
       margin-bottom: 20px;
-      border-radius: 8px;
+      background-color: #e9f3ff;
     }
-    .smena-header {
-      font-weight: bold;
-      margin-bottom: 10px;
+
+    .pacient-row {
+      margin-top: 10px;
     }
-    .pacient-radek {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: 8px;
-    }
-    select, input[type="time"], input[type="text"] {
-      padding: 6px;
-      font-size: 14px;
-    }
-    button {
-      padding: 6px 10px;
-      font-size: 14px;
-      cursor: pointer;
+
+    select, input[type="time"], input[type="text"], button {
+      margin: 5px;
+      padding: 5px;
+      font-size: 16px;
     }
   </style>
 </head>
@@ -69,7 +62,8 @@
       projectId: "dochazka-app",
       storageBucket: "dochazka-app.appspot.com",
       messagingSenderId: "912220280247",
-      appId: "1:912220280247:web:e0b27491b9234cba984432"
+      appId: "1:912220280247:web:e0b27491b9234cba984432",
+      measurementId: "G-G8PPKTK907"
     };
 
     firebase.initializeApp(firebaseConfig);
@@ -77,97 +71,95 @@
     const auth = firebase.auth();
 
     const pacienti = ["Paseková", "Dragoun", "Žáková", "Chmarníková", "Drbohlavová"];
-    const smenyContainer = document.getElementById("smenyContainer");
 
     auth.onAuthStateChanged(user => {
-      if (user) {
-        nactiSmeny();
-      } else {
+      if (!user) {
         alert("Přístup pouze pro přihlášené uživatele.");
         window.location.href = "index.html";
+        return;
       }
+
+      const smenyContainer = document.getElementById("smenyContainer");
+
+      db.collection("smeny").orderBy("od").get().then(snapshot => {
+        snapshot.forEach(doc => {
+          const smena = doc.data();
+          const smenaBox = document.createElement("div");
+          smenaBox.className = "smena-box";
+
+          const nadpis = document.createElement('h3');
+          nadpis.innerHTML = `${smena.od} (<strong>${smena.email}</strong>)`;
+          smenaBox.appendChild(nadpis);
+
+          const pacientiDiv = document.createElement("div");
+
+          if (Array.isArray(smena.pacienti)) {
+            smena.pacienti.forEach((pacient, index) => {
+              pacientiDiv.appendChild(vytvorPacientRadek(doc.id, index, pacient.jmeno, pacient.cas, pacient.komentar));
+            });
+          }
+
+          const pridejBtn = document.createElement("button");
+          pridejBtn.textContent = "Přidat pacienta";
+          pridejBtn.addEventListener("click", () => {
+            pacientiDiv.appendChild(vytvorPacientRadek(doc.id, pacientiDiv.childElementCount));
+          });
+
+          smenaBox.appendChild(pacientiDiv);
+          smenaBox.appendChild(pridejBtn);
+          smenyContainer.appendChild(smenaBox);
+        });
+      });
     });
 
-    async function nactiSmeny() {
-      const snapshot = await db.collection("smeny").get();
-      let smeny = [];
-
-      snapshot.forEach(doc => {
-        const d = doc.data();
-        smeny.push({ id: doc.id, ...d });
-      });
-
-      smeny.sort((a, b) => new Date(a.od) - new Date(b.od));
-      smenyContainer.innerHTML = "";
-
-      smeny.forEach(smena => {
-        const box = document.createElement("div");
-        box.className = "smena-box";
-
-        const datumText = smena.od === smena.do ? smena.od : `${smena.od} – ${smena.do}`;
-        box.innerHTML = `<div class="smena-header">${datumText} (<b>${smena.email}</b>)</div>`;
-
-        const pacientiDiv = document.createElement("div");
-        pacientiDiv.id = `pacienti-${smena.id}`;
-
-        const radek = vytvorPacientRadek(smena.id, smena.pacienti || []);
-        pacientiDiv.appendChild(radek);
-
-        const btn = document.createElement("button");
-        btn.textContent = "Přidat pacienta";
-        btn.onclick = () => {
-          pacientiDiv.appendChild(vytvorPacientRadek(smena.id));
-        };
-
-        box.appendChild(pacientiDiv);
-        box.appendChild(btn);
-        smenyContainer.appendChild(box);
-      });
-    }
-
-    function vytvorPacientRadek(smenaId, data = {}) {
-      const radek = document.createElement("div");
-      radek.className = "pacient-radek";
+    function vytvorPacientRadek(docId, index, vychoziJmeno = "", vychoziCas = "", vychoziKomentar = "") {
+      const row = document.createElement("div");
+      row.className = "pacient-row";
 
       const select = document.createElement("select");
-      select.innerHTML = `<option value="">— vybrat —</option>` +
-        pacienti.map(jmeno => `<option value="${jmeno}" ${data.jmeno === jmeno ? "selected" : ""}>${jmeno}</option>`).join("");
+      pacienti.forEach(jmeno => {
+        const option = document.createElement("option");
+        option.value = jmeno;
+        option.textContent = jmeno;
+        if (jmeno === vychoziJmeno) option.selected = true;
+        select.appendChild(option);
+      });
 
-      const casInput = document.createElement("input");
-      casInput.type = "time";
-      casInput.value = data.cas || "";
+      const time = document.createElement("input");
+      time.type = "time";
+      time.value = vychoziCas;
 
-      const koment = document.createElement("input");
-      koment.type = "text";
-      koment.placeholder = "Komentář";
-      koment.value = data.komentar || "";
+      const komentar = document.createElement("input");
+      komentar.type = "text";
+      komentar.placeholder = "Komentář";
+      komentar.value = vychoziKomentar;
 
-      const ulozBtn = document.createElement("button");
-      ulozBtn.textContent = "Uložit";
-      ulozBtn.onclick = async () => {
-        const jmeno = select.value;
-        const cas = casInput.value;
-        const komentar = koment.value;
+      const ulozit = document.createElement("button");
+      ulozit.textContent = "Uložit";
+      ulozit.addEventListener("click", () => {
+        ulozPacient(docId, index, select.value, time.value, komentar.value);
+      });
 
-        if (!jmeno || !cas) {
-          alert("Vyplňte prosím pacienta i čas.");
-          return;
-        }
+      row.appendChild(select);
+      row.appendChild(time);
+      row.appendChild(komentar);
+      row.appendChild(ulozit);
+      return row;
+    }
 
-        const docRef = db.collection("smeny").doc(smenaId);
-        const docSnap = await docRef.get();
-        const data = docSnap.data();
-        const seznam = data.pacienti || [];
-        seznam.push({ jmeno, cas, komentar });
-        await docRef.update({ pacienti: seznam });
-        alert("Pacient přidán.");
-      };
+    function ulozPacient(docId, index, jmeno, cas, komentar) {
+      const docRef = db.collection("smeny").doc(docId);
+      docRef.get().then(doc => {
+        if (!doc.exists) return;
 
-      radek.appendChild(select);
-      radek.appendChild(casInput);
-      radek.appendChild(koment);
-      radek.appendChild(ulozBtn);
-      return radek;
+        let data = doc.data();
+        if (!Array.isArray(data.pacienti)) data.pacienti = [];
+
+        data.pacienti[index] = { jmeno, cas, komentar };
+        docRef.update({ pacienti: data.pacienti })
+          .then(() => alert("Uloženo"))
+          .catch(err => alert("Chyba při ukládání: " + err));
+      });
     }
   </script>
 </body>
