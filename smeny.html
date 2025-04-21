@@ -4,23 +4,17 @@
   <meta charset="UTF-8">
   <title>Úprava směn</title>
   <style>
-    body {
-      font-family: sans-serif;
-      padding: 20px;
-    }
-
+    body { font-family: sans-serif; padding: 20px; }
     nav {
       background-color: #0057a0;
       padding: 10px;
       margin: -20px -20px 20px -20px;
     }
-
     nav a {
       color: white;
       margin-right: 20px;
       text-decoration: none;
     }
-
     .smena-box {
       border: 1px solid #ccc;
       border-radius: 10px;
@@ -28,15 +22,18 @@
       margin-bottom: 20px;
       background-color: #e9f3ff;
     }
-
     .pacient-row {
       margin-top: 10px;
     }
-
     select, input[type="time"], input[type="text"], button {
       margin: 5px;
       padding: 5px;
       font-size: 16px;
+    }
+    .historie-title {
+      margin-top: 40px;
+      font-size: 20px;
+      color: #333;
     }
   </style>
 </head>
@@ -51,6 +48,9 @@
   <h2>Úprava směn</h2>
   <div id="smenyContainer"></div>
 
+  <h2 class="historie-title">Historie směn</h2>
+  <div id="historieContainer"></div>
+
   <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore-compat.js"></script>
@@ -62,8 +62,7 @@
       projectId: "dochazka-app",
       storageBucket: "dochazka-app.appspot.com",
       messagingSenderId: "912220280247",
-      appId: "1:912220280247:web:e0b27491b9234cba984432",
-      measurementId: "G-G8PPKTK907"
+      appId: "1:912220280247:web:e0b27491b9234cba984432"
     };
 
     firebase.initializeApp(firebaseConfig);
@@ -71,6 +70,7 @@
     const auth = firebase.auth();
 
     const pacienti = ["Paseková", "Dragoun", "Žáková", "Chmarníková", "Drbohlavová"];
+    const dnes = "2025-04-21";
 
     auth.onAuthStateChanged(user => {
       if (!user) {
@@ -80,39 +80,53 @@
       }
 
       const smenyContainer = document.getElementById("smenyContainer");
+      const historieContainer = document.getElementById("historieContainer");
 
       db.collection("smeny").orderBy("od").get().then(snapshot => {
         snapshot.forEach(doc => {
           const smena = doc.data();
-          const smenaBox = document.createElement("div");
-          smenaBox.className = "smena-box";
-
-          const nadpis = document.createElement('h3');
-          nadpis.innerHTML = `${smena.od} (<strong>${smena.email}</strong>)`;
-          smenaBox.appendChild(nadpis);
-
-          const pacientiDiv = document.createElement("div");
-
-          if (Array.isArray(smena.pacienti)) {
-            smena.pacienti.forEach((pacient, index) => {
-              pacientiDiv.appendChild(vytvorPacientRadek(doc.id, index, pacient.jmeno, pacient.cas, pacient.komentar));
-            });
+          const box = vytvorSmenaBox(doc.id, smena);
+          if (smena.od >= dnes) {
+            smenyContainer.appendChild(box);
+          } else {
+            historieContainer.appendChild(box);
           }
-
-          const pridejBtn = document.createElement("button");
-          pridejBtn.textContent = "Přidat pacienta";
-          pridejBtn.addEventListener("click", () => {
-            pacientiDiv.appendChild(vytvorPacientRadek(doc.id, pacientiDiv.childElementCount));
-          });
-
-          smenaBox.appendChild(pacientiDiv);
-          smenaBox.appendChild(pridejBtn);
-          smenyContainer.appendChild(smenaBox);
         });
       });
     });
 
-    function vytvorPacientRadek(docId, index, vychoziJmeno = "", vychoziCas = "", vychoziKomentar = "") {
+    function vytvorSmenaBox(docId, smena) {
+      const smenaBox = document.createElement("div");
+      smenaBox.className = "smena-box";
+
+      const nadpis = document.createElement('h3');
+      nadpis.innerHTML = `${smena.od} (<strong>${smena.email}</strong>)`;
+      smenaBox.appendChild(nadpis);
+
+      const pacientiDiv = document.createElement("div");
+
+      if (Array.isArray(smena.pacienti)) {
+        smena.pacienti.forEach((pacient, index) => {
+          pacientiDiv.appendChild(vytvorPacientRadek(docId, index, pacient.jmeno, pacient.cas, pacient.komentar, smena.od >= dnes));
+        });
+      }
+
+      if (smena.od >= dnes) {
+        const pridejBtn = document.createElement("button");
+        pridejBtn.textContent = "Přidat pacienta";
+        pridejBtn.addEventListener("click", () => {
+          pacientiDiv.appendChild(vytvorPacientRadek(docId, pacientiDiv.childElementCount, "", "", "", true));
+        });
+        smenaBox.appendChild(pacientiDiv);
+        smenaBox.appendChild(pridejBtn);
+      } else {
+        smenaBox.appendChild(pacientiDiv);
+      }
+
+      return smenaBox;
+    }
+
+    function vytvorPacientRadek(docId, index, vychoziJmeno = "", vychoziCas = "", vychoziKomentar = "", editovatelne = true) {
       const row = document.createElement("div");
       row.className = "pacient-row";
 
@@ -124,26 +138,32 @@
         if (jmeno === vychoziJmeno) option.selected = true;
         select.appendChild(option);
       });
+      select.disabled = !editovatelne;
 
       const time = document.createElement("input");
       time.type = "time";
       time.value = vychoziCas;
+      time.disabled = !editovatelne;
 
       const komentar = document.createElement("input");
       komentar.type = "text";
       komentar.placeholder = "Komentář";
       komentar.value = vychoziKomentar;
-
-      const ulozit = document.createElement("button");
-      ulozit.textContent = "Uložit";
-      ulozit.addEventListener("click", () => {
-        ulozPacient(docId, index, select.value, time.value, komentar.value);
-      });
+      komentar.disabled = !editovatelne;
 
       row.appendChild(select);
       row.appendChild(time);
       row.appendChild(komentar);
-      row.appendChild(ulozit);
+
+      if (editovatelne) {
+        const ulozit = document.createElement("button");
+        ulozit.textContent = "Uložit";
+        ulozit.addEventListener("click", () => {
+          ulozPacient(docId, index, select.value, time.value, komentar.value);
+        });
+        row.appendChild(ulozit);
+      }
+
       return row;
     }
 
