@@ -5,15 +5,50 @@
   <title>Dashboard</title>
   <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.css" rel="stylesheet" />
   <style>
-    body { font-family: sans-serif; padding: 20px; }
-    nav { background-color: #0057a0; padding: 10px; margin: -20px -20px 20px -20px; }
-    nav a { color: white; margin-right: 20px; text-decoration: none; }
-    #calendar { max-width: 900px; margin: 0 auto; }
-    .detail-box { background-color: #f0f0f0; margin-top: 20px; padding: 10px; border-radius: 10px; }
-    table { width: 100%; border-collapse: collapse; margin-top: 30px; }
-    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
-    #zadostForm { text-align: center; margin-top: 20px; display: none; }
-    select, button { padding: 10px; font-size: 16px; margin: 5px; }
+    body {
+      font-family: sans-serif;
+      padding: 20px;
+    }
+    nav {
+      background-color: #0057a0;
+      padding: 10px;
+      margin: -20px -20px 20px -20px;
+    }
+    nav a {
+      color: white;
+      margin-right: 20px;
+      text-decoration: none;
+    }
+    #calendar {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    .detail-box, .zadost-box {
+      background-color: #f0f0f0;
+      margin-top: 20px;
+      padding: 10px;
+      border-radius: 10px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 30px;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 8px;
+      text-align: left;
+    }
+    select, button {
+      font-size: 16px;
+      padding: 5px 10px;
+      margin-right: 10px;
+    }
+    @media (hover: none) and (pointer: coarse) {
+      .fc-daygrid-day {
+        touch-action: manipulation;
+      }
+    }
   </style>
 </head>
 <body>
@@ -26,15 +61,7 @@
 
   <h1>Dashboard</h1>
   <div id="calendar"></div>
-  <div id="zadostForm">
-    <h3>Žádost o volno</h3>
-    <p id="vybraneDny"></p>
-    <select id="typVolna">
-      <option value="Dovolená">Dovolená</option>
-      <option value="Neplacené volno">Neplacené volno</option>
-    </select>
-    <button id="potvrditZadost">Požádat</button>
-  </div>
+  <div id="zadostBox" class="zadost-box" style="display:none;"></div>
   <div id="smenyDetail"></div>
 
   <h3>Seznam naplánovaných pacientů</h3>
@@ -70,9 +97,6 @@
     const db = firebase.firestore();
     const auth = firebase.auth();
 
-    let zacatek = null;
-    let konec = null;
-
     auth.onAuthStateChanged(user => {
       if (!user) {
         alert("Musíš být přihlášen.");
@@ -80,79 +104,115 @@
         return;
       }
 
+      let startDate = null;
+      let endDate = null;
+
       const calendarEl = document.getElementById("calendar");
       const detailEl = document.getElementById("smenyDetail");
+      const zadostBox = document.getElementById("zadostBox");
       const tbody = document.getElementById("pacientiBody");
-      const zadostForm = document.getElementById("zadostForm");
-      const vybraneDny = document.getElementById("vybraneDny");
-      const typVolna = document.getElementById("typVolna");
-      const potvrditZadost = document.getElementById("potvrditZadost");
 
       const calendar = new FullCalendar.Calendar(calendarEl, {
         initialView: "dayGridMonth",
         locale: "cs",
         selectable: true,
         select: function(info) {
-          zacatek = info.startStr;
-          konec = new Date(info.end);
-          konec.setDate(konec.getDate() - 1);
-          konec = konec.toISOString().split("T")[0];
-          vybraneDny.textContent = `Od ${zacatek} do ${konec}`;
-          zadostForm.style.display = "block";
+          startDate = info.startStr;
+          const end = new Date(info.end);
+          end.setDate(end.getDate() - 1);
+          endDate = end.toISOString().split("T")[0];
+
+          zadostBox.style.display = "block";
+          zadostBox.innerHTML = `
+            <h4>Žádost o volno</h4>
+            <p>Od ${startDate} do ${endDate}</p>
+            <select id="typVolna">
+              <option value="Dovolená">Dovolená</option>
+              <option value="Neplacené volno">Neplacené volno</option>
+            </select>
+            <button onclick="odesliZadost('${startDate}', '${endDate}', '${user.email}')">Požádat</button>
+          `;
         },
-        events: async function(fetchInfo, successCallback) {
-          const events = [];
-
-          const smenySnap = await db.collection("smeny").where("email", "==", user.email).get();
-          smenySnap.forEach(doc => {
-            const d = doc.data();
-            events.push({ title: "Směna", start: d.od, color: "#007bff" });
-          });
-
-          const volnoSnap = await db.collection("zadosti").where("email", "==", user.email).get();
-          volnoSnap.forEach(doc => {
-            const d = doc.data();
-            if (d.stav === "schváleno") {
-              const endDate = new Date(new Date(d.do).getTime() + 86400000).toISOString().split("T")[0];
-              events.push({ title: d.typ, start: d.od, end: endDate, color: "green" });
-            }
-          });
-
-          successCallback(events);
+        headerToolbar: {
+          left: "title",
+          center: "",
+          right: "today prev,next"
+        },
+        events: [],
+        dateClick: function(info) {
+          zobrazDetail(info.dateStr, user.email);
         }
       });
 
       calendar.render();
 
-      potvrditZadost.addEventListener("click", async () => {
-        const typ = typVolna.value;
-        await db.collection("zadosti").add({
-          email: user.email,
-          od: zacatek,
-          do: konec,
-          typ: typ,
-          stav: "čeká"
-        });
-        alert("Žádost o volno byla odeslána.");
-        zadostForm.style.display = "none";
-        calendar.refetchEvents();
-      });
+      function zobrazDetail(datum, email) {
+        db.collection("smeny")
+          .where("email", "==", email)
+          .get()
+          .then(snapshot => {
+            const data = snapshot.docs.map(doc => doc.data()).filter(smena => smena.od === datum);
+            let html = "";
+            if (data.length) {
+              html += `<div class="detail-box"><h3>${datum.split("-").reverse().join(". ")}</h3>`;
+              data.forEach(smena => {
+                (smena.pacienti || []).forEach(p => {
+                  if (p.jmeno && p.cas && p.komentar) {
+                    html += `<p>${p.jmeno} – ${p.cas} – ${p.komentar}</p>`;
+                  }
+                });
+              });
+              html += `</div>`;
+            } else {
+              html += `<div class="detail-box"><p>Žádná směna pro tento den.</p></div>`;
+            }
+            detailEl.innerHTML = html;
+          });
+      }
 
-      db.collection("smeny").where("email", "==", user.email).get().then(snapshot => {
-        snapshot.forEach(doc => {
-          const smena = doc.data();
-          if (Array.isArray(smena.pacienti)) {
-            smena.pacienti.forEach(p => {
-              if (p.ulozeno) {
-                const row = document.createElement("tr");
-                row.innerHTML = `<td>${smena.od}</td><td>${p.jmeno}</td><td>${p.cas}</td><td>${p.komentar}</td>`;
-                tbody.appendChild(row);
-              }
+      db.collection("smeny")
+        .where("email", "==", user.email)
+        .get()
+        .then(snapshot => {
+          snapshot.forEach(doc => {
+            const smena = doc.data();
+            calendar.addEvent({
+              title: "Směna",
+              start: smena.od,
+              color: "#007bff"
             });
-          }
+
+            if (Array.isArray(smena.pacienti)) {
+              smena.pacienti.forEach(p => {
+                if (p.ulozeno) {
+                  const row = document.createElement("tr");
+                  row.innerHTML = `
+                    <td>${smena.od}</td>
+                    <td>${p.jmeno}</td>
+                    <td>${p.cas}</td>
+                    <td>${p.komentar}</td>
+                  `;
+                  tbody.appendChild(row);
+                }
+              });
+            }
+          });
         });
-      });
     });
+
+    function odesliZadost(od, doDatum, email) {
+      const typ = document.getElementById("typVolna").value;
+      firebase.firestore().collection("zadosti").add({
+        od,
+        do: doDatum,
+        email,
+        typ,
+        stav: "čeká"
+      }).then(() => {
+        alert("Žádost byla odeslána.");
+        document.getElementById("zadostBox").style.display = "none";
+      });
+    }
   </script>
 </body>
 </html>
