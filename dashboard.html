@@ -105,48 +105,13 @@
           center: "",
           right: "today prev,next"
         },
-        events: [],
-        dateClick: function(info) {
-          zobrazDetail(info.dateStr, user.email);
-        }
-      });
+        events: async function(fetchInfo, successCallback) {
+          const events = [];
 
-      calendar.render();
-
-      function zobrazDetail(datum, email) {
-        db.collection("smeny")
-          .where("email", "==", email)
-          .get()
-          .then(snapshot => {
-            const data = snapshot.docs
-              .map(doc => doc.data())
-              .filter(smena => smena.od === datum);
-            let html = "";
-            if (data.length) {
-              html += `<div class="detail-box"><h3>${datum.split("-").reverse().join(". ")}.</h3>`;
-              data.forEach(smena => {
-                (smena.pacienti || []).forEach(p => {
-                  if (p.jmeno && p.cas && p.komentar) {
-                    html += `<p>${p.jmeno} – ${p.cas} – ${p.komentar}</p>`;
-                  }
-                });
-              });
-              html += `</div>`;
-            } else {
-              html += `<div class="detail-box"><p>Žádná směna pro tento den.</p></div>`;
-            }
-            detailEl.innerHTML = html;
-          });
-      }
-
-      // Načti směny do kalendáře
-      db.collection("smeny")
-        .where("email", "==", user.email)
-        .get()
-        .then(snapshot => {
-          snapshot.forEach(doc => {
+          const smenySnap = await db.collection("smeny").where("email", "==", user.email).get();
+          smenySnap.forEach(doc => {
             const smena = doc.data();
-            calendar.addEvent({
+            events.push({
               title: "Směna",
               start: smena.od,
               color: "#007bff"
@@ -167,7 +132,55 @@
               });
             }
           });
-        });
+
+          const volnoSnap = await db.collection("zadosti").where("email", "==", user.email).get();
+          volnoSnap.forEach(doc => {
+            const z = doc.data();
+            if (z.od && z.do && z.stav === "schváleno") {
+              const end = new Date(new Date(z.do).getTime() + 86400000).toISOString().split('T')[0];
+              events.push({
+                title: z.typ,
+                start: z.od,
+                end: end,
+                color: "green"
+              });
+            }
+          });
+
+          successCallback(events);
+        },
+        dateClick: function(info) {
+          zobrazDetail(info.dateStr, user.email);
+        }
+      });
+
+      calendar.render();
+
+      function zobrazDetail(datum, email) {
+        db.collection("smeny")
+          .where("email", "==", email)
+          .get()
+          .then(snapshot => {
+            const data = snapshot.docs
+              .map(doc => doc.data())
+              .filter(smena => smena.od === datum);
+            let html = "";
+            if (data.length) {
+              html += `<div class="detail-box"><h3>${datum.split("-").reverse().join(". ")}</h3>`;
+              data.forEach(smena => {
+                (smena.pacienti || []).forEach(p => {
+                  if (p.jmeno && p.cas && p.komentar) {
+                    html += `<p>${p.jmeno} – ${p.cas} – ${p.komentar}</p>`;
+                  }
+                });
+              });
+              html += `</div>`;
+            } else {
+              html += `<div class="detail-box"><p>Žádná směna pro tento den.</p></div>`;
+            }
+            detailEl.innerHTML = html;
+          });
+      }
     });
   </script>
 </body>
