@@ -42,10 +42,8 @@
     <a href="planovani.html">Plánování směn</a>
     <a href="smeny.html">Úprava směn</a>
   </nav>
-
   <h2>Plánování směn</h2>
   <div id="calendar"></div>
-
   <div class="modal" id="planovaniForm" style="display: none;">
     <h3>Vybrané dny: <span id="range"></span></h3>
     <label for="emailSelect">Vyber sestru:</label>
@@ -91,23 +89,40 @@
         selectable: true,
         select: function (info) {
           startDate = info.startStr;
-          endDate = info.endStr; // OPRAVENO: bez odečtu dne
+          endDate = new Date(info.end.getTime() - 1);
+          endDate = endDate.toISOString().split("T")[0];
 
           document.getElementById("range").textContent = `${startDate} – ${endDate}`;
           document.getElementById("souhrn").innerHTML = "";
           document.getElementById("planovaniForm").style.display = "block";
         },
+        eventClick: async function(info) {
+          if (info.event.extendedProps.typ === "smena") {
+            const datum = info.event.startStr;
+            const confirmDelete = confirm(`Opravdu chceš smazat směnu ${info.event.title} na den ${datum}?`);
+            if (confirmDelete) {
+              try {
+                await db.collection("smeny").doc(info.event.id).delete();
+                alert("Směna smazána.");
+                calendar.refetchEvents();
+              } catch (error) {
+                alert("Chyba při mazání směny: " + error.message);
+              }
+            }
+          }
+        },
         events: async function(fetchInfo, successCallback) {
           const events = [];
+
           const smenySnap = await db.collection("smeny").get();
           smenySnap.forEach(doc => {
             const d = doc.data();
             if (d.od && d.do && d.email) {
               let barva = "#007bff";
-              if (d.email === "sestra@test.cz") barva = "#007bff";
-              else if (d.email === "druhasestra@test.cz") barva = "#6f42c1";
+              if (d.email === "druhasestra@test.cz") barva = "#6f42c1";
               else if (d.email === "treti@test.cz") barva = "#20c997";
               else if (d.email === "vedouci@test.cz") barva = "#fd7e14";
+
               events.push({
                 id: doc.id,
                 title: `Směna – ${d.email}`,
@@ -118,13 +133,30 @@
               });
             }
           });
+
+          const volnoSnap = await db.collection("zadosti").get();
+          volnoSnap.forEach(doc => {
+            const d = doc.data();
+            if (d.od && d.do && d.email) {
+              const barva = d.stav === "schváleno" ? "green" : d.stav === "zamítnuto" ? "red" : "#999";
+              events.push({
+                title: `${d.typ} – ${d.email}`,
+                start: d.od,
+                end: new Date(new Date(d.do).getTime() + 86400000).toISOString().split('T')[0],
+                color: barva
+              });
+            }
+          });
+
           successCallback(events);
         }
       });
 
       calendar.render();
 
-      document.getElementById("emailSelect").addEventListener("change", () => zobrazSouhrn());
+      document.getElementById("emailSelect").addEventListener("change", () => {
+        zobrazSouhrn();
+      });
 
       function zobrazSouhrn() {
         const email = document.getElementById("emailSelect").value;
