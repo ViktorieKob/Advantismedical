@@ -1,53 +1,33 @@
 <!DOCTYPE html>
 <html lang="cs">
 <head>
-  <meta charset="UTF-8">
-  <title>Úprava směn</title>
+  <meta charset="UTF-8" />
+  <title>Dashboard</title>
+  <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.css" rel="stylesheet" />
   <style>
     body {
       font-family: sans-serif;
       padding: 20px;
     }
-
     nav {
       background-color: #0057a0;
       padding: 10px;
       margin: -20px -20px 20px -20px;
     }
-
     nav a {
       color: white;
       margin-right: 20px;
       text-decoration: none;
     }
-
-    .smena-box {
-      border: 1px solid #ccc;
+    #calendar {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    .detail-box {
+      background-color: #f0f0f0;
+      margin-top: 20px;
+      padding: 10px;
       border-radius: 10px;
-      padding: 20px;
-      margin-bottom: 20px;
-      background-color: #e9f3ff;
-    }
-
-    .pacient-row {
-      margin-top: 10px;
-    }
-
-    select, input[type="time"], input[type="text"], button {
-      margin: 5px;
-      padding: 5px;
-      font-size: 16px;
-    }
-
-    .historie {
-      background-color: #f2f2f2;
-      margin-top: 50px;
-      padding: 20px;
-      border-radius: 10px;
-    }
-
-    .historie h3 {
-      color: #666;
     }
   </style>
 </head>
@@ -59,13 +39,11 @@
     <a href="smeny.html">Úprava směn</a>
   </nav>
 
-  <h2>Úprava směn</h2>
-  <div id="smenyContainer"></div>
-  <div class="historie">
-    <h3>Historie směn</h3>
-    <div id="historieContainer"></div>
-  </div>
+  <h1>Dashboard</h1>
+  <div id="calendar"></div>
+  <div id="smenyDetail"></div>
 
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore-compat.js"></script>
@@ -85,149 +63,72 @@
     const db = firebase.firestore();
     const auth = firebase.auth();
 
-    const pacienti = ["Paseková", "Dragoun", "Žáková", "Chmarníková", "Drbohlavová"];
-    const dnes = new Date().toISOString().split("T")[0];
-
     auth.onAuthStateChanged(user => {
       if (!user) {
-        alert("Přístup pouze pro přihlášené uživatele.");
+        alert("Musíš být přihlášen.");
         window.location.href = "index.html";
         return;
       }
 
-      const aktivniBox = document.getElementById("smenyContainer");
-      const historieBox = document.getElementById("historieContainer");
-
-      db.collection("smeny").orderBy("od").get().then(snapshot => {
-        snapshot.forEach(doc => {
-          const smena = doc.data();
-          const smenaBox = document.createElement("div");
-          smenaBox.className = "smena-box";
-
-          const nadpis = document.createElement('h3');
-          nadpis.innerHTML = `${smena.od} (<strong>${smena.email}</strong>)`;
-          smenaBox.appendChild(nadpis);
-
-          const pacientiDiv = document.createElement("div");
-
-          if (Array.isArray(smena.pacienti)) {
-            smena.pacienti.forEach((pacient, index) => {
-              pacientiDiv.appendChild(
-                vytvorPacientRadek(doc.id, index, pacient.jmeno, pacient.cas, pacient.komentar, smena.od <= dnes)
-              );
-            });
-          }
-
-          if (smena.od > dnes) {
-            const pridejBtn = document.createElement("button");
-            pridejBtn.textContent = "Přidat pacienta";
-            pridejBtn.addEventListener("click", () => {
-              pacientiDiv.appendChild(
-                vytvorPacientRadek(doc.id, pacientiDiv.childElementCount, "", "", "", false)
-              );
-            });
-            smenaBox.appendChild(pridejBtn);
-            aktivniBox.appendChild(smenaBox);
-          } else {
-            historieBox.appendChild(smenaBox);
-          }
-
-          smenaBox.appendChild(pacientiDiv);
-        });
-      });
-    });
-
-    function vytvorPacientRadek(docId, index, vychoziJmeno = "", vychoziCas = "", vychoziKomentar = "", zamknuto = false) {
-      const row = document.createElement("div");
-      row.className = "pacient-row";
-
-      const select = document.createElement("select");
-      pacienti.forEach(jmeno => {
-        const option = document.createElement("option");
-        option.value = jmeno;
-        option.textContent = jmeno;
-        if (jmeno === vychoziJmeno) option.selected = true;
-        select.appendChild(option);
+      const calendarEl = document.getElementById("calendar");
+      const detailEl = document.getElementById("smenyDetail");
+      const calendar = new FullCalendar.Calendar(calendarEl, {
+        initialView: "dayGridMonth",
+        locale: "cs",
+        headerToolbar: {
+          left: "title",
+          center: "",
+          right: "today prev,next"
+        },
+        events: [],
+        dateClick: function(info) {
+          zobrazDetail(info.dateStr, user.email);
+        }
       });
 
-      const time = document.createElement("input");
-      time.type = "time";
-      time.value = vychoziCas;
+      calendar.render();
 
-      const komentar = document.createElement("input");
-      komentar.type = "text";
-      komentar.placeholder = "Komentář";
-      komentar.value = vychoziKomentar;
-
-      const ulozit = document.createElement("button");
-      ulozit.textContent = "Uložit";
-
-      const upravit = document.createElement("button");
-      upravit.textContent = "Upravit";
-      upravit.style.display = "none";
-
-      const smazat = document.createElement("button");
-      smazat.textContent = "Smazat";
-      smazat.style.backgroundColor = "#f55";
-
-      // Zámek
-      if (zamknuto) zamkni();
-
-      ulozit.addEventListener("click", () => {
-        ulozPacient(docId, index, select.value, time.value, komentar.value);
-        zamkni();
-      });
-
-      upravit.addEventListener("click", () => {
-        select.disabled = false;
-        time.disabled = false;
-        komentar.disabled = false;
-        ulozit.style.display = "inline";
-        upravit.style.display = "none";
-      });
-
-      smazat.addEventListener("click", () => {
-        if (!confirm("Opravdu smazat tohoto pacienta?")) return;
-        db.collection("smeny").doc(docId).get().then(doc => {
-          if (!doc.exists) return;
-          let data = doc.data();
-          if (!Array.isArray(data.pacienti)) return;
-
-          data.pacienti.splice(index, 1);
-          db.collection("smeny").doc(docId).update({ pacienti: data.pacienti })
-            .then(() => location.reload());
-        });
-      });
-
-      function zamkni() {
-        select.disabled = true;
-        time.disabled = true;
-        komentar.disabled = true;
-        ulozit.style.display = "none";
-        upravit.style.display = "inline";
+      function zobrazDetail(datum, email) {
+        db.collection("smeny")
+          .where("email", "==", email)
+          .get()
+          .then(snapshot => {
+            const data = snapshot.docs
+              .map(doc => doc.data())
+              .filter(smena => smena.od === datum);
+            let html = "";
+            if (data.length) {
+              html += `<div class="detail-box"><h3>${datum.split("-").reverse().join(". ")}.</h3>`;
+              data.forEach(smena => {
+                (smena.pacienti || []).forEach(p => {
+                  if (p.jmeno && p.cas && p.komentar) {
+                    html += `<p>${p.jmeno} – ${p.cas} – ${p.komentar}</p>`;
+                  }
+                });
+              });
+              html += `</div>`;
+            } else {
+              html += `<div class="detail-box"><p>Žádná směna pro tento den.</p></div>`;
+            }
+            detailEl.innerHTML = html;
+          });
       }
 
-      row.appendChild(select);
-      row.appendChild(time);
-      row.appendChild(komentar);
-      row.appendChild(ulozit);
-      row.appendChild(upravit);
-      row.appendChild(smazat);
-      return row;
-    }
-
-    function ulozPacient(docId, index, jmeno, cas, komentar) {
-      const docRef = db.collection("smeny").doc(docId);
-      docRef.get().then(doc => {
-        if (!doc.exists) return;
-        let data = doc.data();
-        if (!Array.isArray(data.pacienti)) data.pacienti = [];
-
-        data.pacienti[index] = { jmeno, cas, komentar };
-        docRef.update({ pacienti: data.pacienti })
-          .then(() => console.log("Uloženo"));
-      });
-    }
+      // Načti směny do kalendáře
+      db.collection("smeny")
+        .where("email", "==", auth.currentUser.email)
+        .get()
+        .then(snapshot => {
+          snapshot.forEach(doc => {
+            const smena = doc.data();
+            calendar.addEvent({
+              title: "Směna",
+              start: smena.od,
+              color: "#007bff"
+            });
+          });
+        });
+    });
   </script>
 </body>
 </html>
