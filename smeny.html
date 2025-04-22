@@ -1,10 +1,8 @@
 <!DOCTYPE html>
 <html lang="cs">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Plánování směn</title>
-  <link href="https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.min.css" rel="stylesheet" />
+  <meta charset="UTF-8">
+  <title>Úprava směn</title>
   <style>
     body {
       font-family: sans-serif;
@@ -23,20 +21,26 @@
       text-decoration: none;
     }
 
-    #calendar {
-      max-width: 900px;
-      margin: 0 auto;
+    .smena-box {
+      border: 1px solid #ccc;
+      border-radius: 10px;
+      padding: 20px;
+      margin-bottom: 20px;
+      background-color: #e9f3ff;
     }
 
-    .modal {
-      text-align: center;
-      margin-top: 20px;
+    .pacient-row {
+      margin-top: 10px;
     }
 
-    select, button {
-      padding: 10px;
-      font-size: 16px;
+    select, input[type="time"], input[type="text"], button {
       margin: 5px;
+      padding: 5px;
+      font-size: 16px;
+    }
+
+    .ulozeno {
+      background-color: #d4edda;
     }
   </style>
 </head>
@@ -48,23 +52,9 @@
     <a href="smeny.html">Úprava směn</a>
   </nav>
 
-  <h2>Plánování směn</h2>
-  <div id="calendar"></div>
+  <h2>Úprava směn</h2>
+  <div id="smenyContainer"></div>
 
-  <div class="modal" id="planovaniForm" style="display: none;">
-    <h3>Vybrané dny: <span id="range"></span></h3>
-    <label for="emailSelect">Vyber sestru:</label>
-    <select id="emailSelect">
-      <option value="sestra@test.cz">sestra@test.cz</option>
-      <option value="druhasestra@test.cz">druhasestra@test.cz</option>
-      <option value="treti@test.cz">treti@test.cz</option>
-      <option value="vedouci@test.cz">vedouci@test.cz</option>
-    </select>
-    <div id="souhrn" style="margin-top: 15px;"></div>
-    <button id="potvrditBtn">Potvrdit směnu</button>
-  </div>
-
-  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@5.11.3/main.min.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore-compat.js"></script>
@@ -84,110 +74,131 @@
     const db = firebase.firestore();
     const auth = firebase.auth();
 
-    let startDate = null;
-    let endDate = null;
-    let calendar = null;
+    const smenyContainer = document.getElementById("smenyContainer");
+    const pacienti = [];
 
-    document.addEventListener("DOMContentLoaded", function () {
-      const calendarEl = document.getElementById("calendar");
-
-      calendar = new FullCalendar.Calendar(calendarEl, {
-        initialView: "dayGridMonth",
-        selectable: true,
-        select: function (info) {
-          startDate = info.startStr;
-          endDate = new Date(info.end);
-          endDate = new Date(endDate.setDate(endDate.getDate() - 1));
-          endDate = endDate.toISOString().split("T")[0];
-
-          document.getElementById("range").textContent = `${startDate} – ${endDate}`;
-          document.getElementById("souhrn").innerHTML = "";
-          document.getElementById("planovaniForm").style.display = "block";
-        },
-        eventClick: async function(info) {
-          if (info.event.extendedProps.typ === "smena") {
-            const datum = info.event.startStr;
-            const confirmDelete = confirm(`Opravdu chceš smazat směnu ${info.event.title} na den ${datum}?`);
-            if (confirmDelete) {
-              try {
-                await db.collection("smeny").doc(info.event.id).delete();
-                alert("Směna smazána.");
-                calendar.refetchEvents();
-              } catch (error) {
-                alert("Chyba při mazání směny: " + error.message);
-              }
-            }
-          }
-        },
-        events: async function(fetchInfo, successCallback) {
-          const events = [];
-
-          const smenySnap = await db.collection("smeny").get();
-          smenySnap.forEach(doc => {
-            const d = doc.data();
-            if (d.od && d.email) {
-              let barva = "#007bff";
-              if (d.email === "druhasestra@test.cz") barva = "#6f42c1";
-              else if (d.email === "treti@test.cz") barva = "#20c997";
-              else if (d.email === "vedouci@test.cz") barva = "#fd7e14";
-
-              events.push({
-                id: doc.id,
-                title: `Směna – ${d.email}`,
-                start: d.od,
-                color: barva,
-                typ: "smena"
-              });
-            }
-          });
-
-          const volnoSnap = await db.collection("zadosti").get();
-          volnoSnap.forEach(doc => {
-            const d = doc.data();
-            if (d.od && d.do && d.email) {
-              const barva = d.stav === "schváleno" ? "green" : d.stav === "zamítnuto" ? "red" : "#999";
-              events.push({
-                title: `${d.typ} – ${d.email}`,
-                start: d.od,
-                end: new Date(new Date(d.do).getTime() + 86400000).toISOString().split('T')[0],
-                color: barva
-              });
-            }
-          });
-
-          successCallback(events);
-        }
-      });
-
-      calendar.render();
-
-      document.getElementById("emailSelect").addEventListener("change", zobrazSouhrn);
-
-      function zobrazSouhrn() {
-        const email = document.getElementById("emailSelect").value;
-        document.getElementById("souhrn").innerHTML = `
-          <p><strong>Sestra:</strong> ${email}</p>
-          <p><strong>Od:</strong> ${startDate}</p>
-          <p><strong>Do:</strong> ${endDate}</p>
-        `;
+    auth.onAuthStateChanged(user => {
+      if (!user) {
+        alert("Přístup pouze pro přihlášené uživatele.");
+        window.location.href = "index.html";
+        return;
       }
 
-      document.getElementById("potvrditBtn").addEventListener("click", async () => {
-        const email = document.getElementById("emailSelect").value;
-        const current = new Date(startDate);
-        const end = new Date(endDate);
-
-        while (current <= end) {
-          const datum = current.toISOString().split("T")[0];
-          await db.collection("smeny").add({ email, od: datum });
-          current.setDate(current.getDate() + 1);
-        }
-
-        alert("Směny přiřazeny.");
-        document.getElementById("planovaniForm").style.display = "none";
-        calendar.refetchEvents();
+      db.collection("pacienti").get().then(snapshot => {
+        snapshot.forEach(doc => pacienti.push(doc.data().jmeno));
+      }).then(() => {
+        db.collection("smeny").orderBy("od").get().then(snapshot => {
+          snapshot.forEach(doc => zobrazSmenu(doc));
+        });
       });
     });
+
+    function zobrazSmenu(doc) {
+      const smena = doc.data();
+      const smenaBox = document.createElement("div");
+      smenaBox.className = "smena-box";
+      if (smena.ulozeno) smenaBox.classList.add("ulozeno");
+
+      const nadpis = document.createElement('h3');
+      nadpis.textContent = `${smena.od} (${smena.email})`;
+      smenaBox.appendChild(nadpis);
+
+      const pacientiDiv = document.createElement("div");
+      if (Array.isArray(smena.pacienti)) {
+        smena.pacienti.forEach((p, i) => {
+          pacientiDiv.appendChild(vytvorRadek(doc.id, i, p.jmeno, p.cas, p.komentar, smena.ulozeno));
+        });
+      }
+
+      if (!smena.ulozeno) {
+        const pridejBtn = document.createElement("button");
+        pridejBtn.textContent = "Přidat pacienta";
+        pridejBtn.onclick = () => {
+          pacientiDiv.appendChild(vytvorRadek(doc.id, pacientiDiv.childElementCount, "", "", ""));
+        };
+        smenaBox.appendChild(pridejBtn);
+      }
+
+      smenaBox.appendChild(pacientiDiv);
+
+      if (!smena.ulozeno) {
+        const ulozitBtn = document.createElement("button");
+        ulozitBtn.textContent = "Uložit směnu";
+        ulozitBtn.onclick = () => {
+          db.collection("smeny").doc(doc.id).update({ ulozeno: true })
+            .then(() => location.reload());
+        };
+        smenaBox.appendChild(ulozitBtn);
+      }
+
+      smenyContainer.appendChild(smenaBox);
+    }
+
+    function vytvorRadek(docId, index, jmeno = "", cas = "", komentar = "", zamknuto = false) {
+      const row = document.createElement("div");
+      row.className = "pacient-row";
+
+      const select = document.createElement("select");
+      pacienti.forEach(p => {
+        const opt = document.createElement("option");
+        opt.value = p;
+        opt.textContent = p;
+        if (p === jmeno) opt.selected = true;
+        select.appendChild(opt);
+      });
+
+      const time = document.createElement("input");
+      time.type = "time";
+      time.value = cas;
+
+      const komentarInput = document.createElement("input");
+      komentarInput.type = "text";
+      komentarInput.placeholder = "Komentář";
+      komentarInput.value = komentar;
+
+      const ulozit = document.createElement("button");
+      ulozit.textContent = "Uložit";
+      ulozit.onclick = () => ulozPacienta(docId, index, select.value, time.value, komentarInput.value);
+
+      const smazat = document.createElement("button");
+      smazat.textContent = "Smazat";
+      smazat.onclick = () => smazPacienta(docId, index);
+
+      if (zamknuto) {
+        select.disabled = true;
+        time.disabled = true;
+        komentarInput.disabled = true;
+        ulozit.disabled = true;
+        smazat.disabled = true;
+      }
+
+      row.appendChild(select);
+      row.appendChild(time);
+      row.appendChild(komentarInput);
+      row.appendChild(ulozit);
+      row.appendChild(smazat);
+      return row;
+    }
+
+    function ulozPacienta(docId, index, jmeno, cas, komentar) {
+      const docRef = db.collection("smeny").doc(docId);
+      docRef.get().then(doc => {
+        const data = doc.data();
+        if (!Array.isArray(data.pacienti)) data.pacienti = [];
+        data.pacienti[index] = { jmeno, cas, komentar };
+        docRef.update({ pacienti: data.pacienti });
+      });
+    }
+
+    function smazPacienta(docId, index) {
+      const docRef = db.collection("smeny").doc(docId);
+      docRef.get().then(doc => {
+        const data = doc.data();
+        if (!Array.isArray(data.pacienti)) return;
+        data.pacienti.splice(index, 1);
+        docRef.update({ pacienti: data.pacienti }).then(() => location.reload());
+      });
+    }
   </script>
 </body>
 </html>
