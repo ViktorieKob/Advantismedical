@@ -10,29 +10,24 @@
       font-family: sans-serif;
       padding: 20px;
     }
-
     nav {
       background-color: #0057a0;
       padding: 10px;
       margin: -20px -20px 20px -20px;
     }
-
     nav a {
       color: white;
       margin-right: 20px;
       text-decoration: none;
     }
-
     #calendar {
       max-width: 900px;
       margin: 0 auto;
     }
-
     .modal {
       text-align: center;
       margin-top: 20px;
     }
-
     select, button {
       padding: 10px;
       font-size: 16px;
@@ -41,12 +36,12 @@
   </style>
 </head>
 <body>
-  <nav style="background-color: #0057a0; padding: 10px;">
-  <a href="dashboard.html" style="color: white; margin-right: 20px; text-decoration: none;">Moje směny</a>
-  <a href="zadosti.html" style="color: white; margin-right: 20px; text-decoration: none;">Žádosti</a>
-  <a href="planovani.html" style="color: white; margin-right: 20px; text-decoration: none;">Plánování směn</a>
-  <a href="smeny.html" style="color: white; text-decoration: none;">Úprava směn</a>
-</nav>
+  <nav>
+    <a href="dashboard.html">Moje směny</a>
+    <a href="zadosti.html">Žádosti</a>
+    <a href="planovani.html">Plánování směn</a>
+    <a href="smeny.html">Úprava směn</a>
+  </nav>
 
   <h2>Plánování směn</h2>
   <div id="calendar"></div>
@@ -96,48 +91,23 @@
         selectable: true,
         select: function (info) {
           startDate = info.startStr;
-          const end = new Date(info.end);
-          end.setDate(end.getDate() - 1);
-          endDate = end.toISOString().split("T")[0];
+          endDate = info.endStr; // OPRAVENO: bez odečtu dne
 
           document.getElementById("range").textContent = `${startDate} – ${endDate}`;
           document.getElementById("souhrn").innerHTML = "";
           document.getElementById("planovaniForm").style.display = "block";
         },
-        eventClick: async function(info) {
-          if (info.event.extendedProps.typ === "smena") {
-            const datum = info.event.startStr;
-            const confirmDelete = confirm(`Opravdu chceš smazat směnu ${info.event.title} na den ${datum}?`);
-            if (confirmDelete) {
-              try {
-                await db.collection("smeny").doc(info.event.id).delete();
-                alert("Směna smazána.");
-                calendar.refetchEvents();
-              } catch (error) {
-                alert("Chyba při mazání směny: " + error.message);
-              }
-            }
-          }
-        },
         events: async function(fetchInfo, successCallback) {
           const events = [];
-
           const smenySnap = await db.collection("smeny").get();
           smenySnap.forEach(doc => {
             const d = doc.data();
             if (d.od && d.do && d.email) {
-              let barva = "#007bff"; // výchozí
-
-              if (d.email === "sestra@test.cz") {
-                barva = "#007bff"; // modrá
-              } else if (d.email === "druhasestra@test.cz") {
-                barva = "#6f42c1"; // fialová
-              } else if (d.email === "treti@test.cz") {
-                barva = "#20c997"; // zelenomodrá
-              } else if (d.email === "vedouci@test.cz") {
-                barva = "#fd7e14"; // oranžová
-              }
-
+              let barva = "#007bff";
+              if (d.email === "sestra@test.cz") barva = "#007bff";
+              else if (d.email === "druhasestra@test.cz") barva = "#6f42c1";
+              else if (d.email === "treti@test.cz") barva = "#20c997";
+              else if (d.email === "vedouci@test.cz") barva = "#fd7e14";
               events.push({
                 id: doc.id,
                 title: `Směna – ${d.email}`,
@@ -148,30 +118,13 @@
               });
             }
           });
-
-          const volnoSnap = await db.collection("zadosti").get();
-          volnoSnap.forEach(doc => {
-            const d = doc.data();
-            if (d.od && d.do && d.email) {
-              const barva = d.stav === "schváleno" ? "green" : d.stav === "zamítnuto" ? "red" : "#999";
-              events.push({
-                title: `${d.typ} – ${d.email}`,
-                start: d.od,
-                end: new Date(new Date(d.do).getTime() + 86400000).toISOString().split('T')[0],
-                color: barva
-              });
-            }
-          });
-
           successCallback(events);
         }
       });
 
       calendar.render();
 
-      document.getElementById("emailSelect").addEventListener("change", () => {
-        zobrazSouhrn();
-      });
+      document.getElementById("emailSelect").addEventListener("change", () => zobrazSouhrn());
 
       function zobrazSouhrn() {
         const email = document.getElementById("emailSelect").value;
