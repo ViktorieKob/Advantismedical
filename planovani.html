@@ -82,6 +82,7 @@
 
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
+    const auth = firebase.auth();
 
     let startDate = null;
     let endDate = null;
@@ -95,11 +96,14 @@
         selectable: true,
         select: function (info) {
           startDate = info.startStr;
-          endDate = new Date(info.end);
-          endDate.setDate(endDate.getDate() - 1);
-          endDate = endDate.toISOString().split("T")[0];
 
-          document.getElementById("range").textContent = `${startDate} – ${endDate}`;
+          const endForDisplay = new Date(info.end);
+          endForDisplay.setDate(endForDisplay.getDate() - 1);
+          endDate = info.endStr;
+
+          const displayEndDate = endForDisplay.toISOString().split("T")[0];
+
+          document.getElementById("range").textContent = `${startDate} – ${displayEndDate}`;
           document.getElementById("souhrn").innerHTML = "";
           document.getElementById("planovaniForm").style.display = "block";
         },
@@ -162,20 +166,25 @@
 
       document.getElementById("emailSelect").addEventListener("change", () => {
         const email = document.getElementById("emailSelect").value;
+        const displayEnd = new Date(endDate);
+        displayEnd.setDate(displayEnd.getDate() - 1);
         document.getElementById("souhrn").innerHTML = `
           <p><strong>Sestra:</strong> ${email}</p>
           <p><strong>Od:</strong> ${startDate}</p>
-          <p><strong>Do:</strong> ${endDate}</p>
+          <p><strong>Do:</strong> ${displayEnd.toISOString().split("T")[0]}</p>
         `;
       });
 
       document.getElementById("potvrditBtn").addEventListener("click", async () => {
         const email = document.getElementById("emailSelect").value;
-        const start = new Date(startDate);
+        const current = new Date(startDate);
         const end = new Date(endDate);
-        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-          const datum = d.toISOString().split("T")[0];
+        end.setDate(end.getDate() - 1); // opravdu ukládáme do předchozího dne včetně
+
+        while (current <= end) {
+          const datum = current.toISOString().split("T")[0];
           await db.collection("smeny").add({ email, od: datum });
+          current.setDate(current.getDate() + 1);
         }
 
         alert("Směny přiřazeny.");
