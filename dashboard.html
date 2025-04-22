@@ -2,201 +2,70 @@
 <html lang="cs">
 <head>
   <meta charset="UTF-8" />
-  <title>Dashboard</title>
-  <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.css" rel="stylesheet" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard – Docházka</title>
+  <link href='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/main.min.css' rel='stylesheet' />
+  <link rel="stylesheet" href="dashboard.css" />
   <style>
-    body {
-      font-family: sans-serif;
-      padding: 20px;
-    }
-    nav {
-      background-color: #0057a0;
-      padding: 10px;
-      margin: -20px -20px 20px -20px;
-    }
-    nav a {
-      color: white;
-      margin-right: 20px;
-      text-decoration: none;
-    }
-    #calendar {
-      max-width: 900px;
-      margin: 0 auto;
-    }
-    .detail-box {
-      background-color: #f0f0f0;
-      margin-top: 20px;
-      padding: 10px;
-      border-radius: 10px;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 30px;
-    }
-    th, td {
-      border: 1px solid #ccc;
-      padding: 8px;
-      text-align: left;
+    #loading {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: white;
+      z-index: 10000;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 1.5em;
     }
   </style>
 </head>
 <body>
-  <nav>
-    <a href="dashboard.html">Moje směny</a>
-    <a href="zadosti.html">Žádosti</a>
-    <a href="planovani.html">Plánování směn</a>
-    <a href="smeny.html">Úprava směn</a>
-  </nav>
+  <div id="loading">Načítání...</div>
+  <div id="menu-container"></div>
 
-  <h1>Dashboard</h1>
-  <div id="calendar"></div>
-  <div id="smenyDetail"></div>
+  <div class="dashboard-container" style="display:none;">
+    <h2 id="username">Moje směny a dovolená</h2>
+    <div class="stats">
+      <p>Počet nadcházejících směn: <span id="sm-shifts">0</span></p>
+      <p>Počet zadaných žádostí: <span id="sm-requests">0</span></p>
+      <p>Počet dnů dovolené: <span id="total-leave">0</span></p>
+      <p>Počet dnů zadané dovolené: <span id="requested-leave">0</span></p>
+      <p>Počet dnů schválené dovolené: <span id="approved-leave">0</span></p>
+    </div>
 
-  <h3>Seznam naplánovaných pacientů</h3>
-  <table id="tabulkaPacientu">
-    <thead>
-      <tr>
-        <th>Datum</th>
-        <th>Pacient</th>
-        <th>Čas</th>
-        <th>Komentář</th>
-      </tr>
-    </thead>
-    <tbody id="pacientiBody"></tbody>
-  </table>
+    <div id="calendar"></div>
 
-  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore-compat.js"></script>
+    <!-- Modal pro výběr typu volna -->
+    <div id="modal" class="modal hidden">
+      <div class="modal-content">
+        <h3>Žádost o volno</h3>
+        <p>Vybrané dny: <span id="selected-days"></span></p>
+        <label>
+          <input type="radio" name="leave-type" value="Dovolená" checked />
+          Dovolená
+        </label>
+        <label>
+          <input type="radio" name="leave-type" value="Neplacené volno" />
+          Neplacené volno
+        </label>
+        <button id="confirm-request">Potvrdit žádost</button>
+        <button id="cancel-request">Zrušit</button>
+      </div>
+    </div>
+  </div>
 
   <script>
-    const firebaseConfig = {
-      apiKey: "AIzaSyD4j1bO7JDbzUM-ca4AWUSkGYpmglWK_IQ",
-      authDomain: "dochazka-app.firebaseapp.com",
-      projectId: "dochazka-app",
-      storageBucket: "dochazka-app.appspot.com",
-      messagingSenderId: "912220280247",
-      appId: "1:912220280247:web:e0b27491b9234cba984432",
-      measurementId: "G-G8PPKTK907"
-    };
-
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.firestore();
-    const auth = firebase.auth();
-
-    auth.onAuthStateChanged(user => {
-      if (!user) {
-        alert("Musíš být přihlášen.");
-        window.location.href = "index.html";
-        return;
-      }
-
-      const calendarEl = document.getElementById("calendar");
-      const detailEl = document.getElementById("smenyDetail");
-      const tbody = document.getElementById("pacientiBody");
-
-      const calendar = new FullCalendar.Calendar(calendarEl, {
-        initialView: "dayGridMonth",
-        locale: "cs",
-        headerToolbar: {
-          left: "title",
-          center: "",
-          right: "today prev,next"
-        },
-        events: [],
-        dateClick: function(info) {
-          zobrazDetail(info.dateStr, user.email);
-        }
+    fetch('menu.html')
+      .then(res => res.text())
+      .then(data => {
+        document.getElementById('menu-container').innerHTML = data;
+        const logo = document.querySelector('.menu img');
+        if (logo) logo.src = 'Logo.png.png';
       });
-
-      calendar.render();
-
-      function zobrazDetail(datum, email) {
-        db.collection("smeny")
-          .where("email", "==", email)
-          .get()
-          .then(snapshot => {
-            const data = snapshot.docs
-              .map(doc => doc.data())
-              .filter(smena => smena.od === datum);
-            let html = "";
-            if (data.length) {
-              html += `<div class="detail-box"><h3>${datum.split("-").reverse().join(". ")}.</h3>`;
-              data.forEach(smena => {
-                (smena.pacienti || []).forEach(p => {
-                  if (p.jmeno && p.cas && p.komentar) {
-                    html += `<p>${p.jmeno} – ${p.cas} – ${p.komentar}</p>`;
-                  }
-                });
-              });
-              html += `</div>`;
-            } else {
-              html += `<div class="detail-box"><p>Žádná směna pro tento den.</p></div>`;
-            }
-            detailEl.innerHTML = html;
-          });
-      }
-
-      // Načti směny
-      db.collection("smeny")
-        .where("email", "==", user.email)
-        .get()
-        .then(snapshot => {
-          snapshot.forEach(doc => {
-            const smena = doc.data();
-            calendar.addEvent({
-              title: "Směna",
-              start: smena.od,
-              color: "#007bff"
-            });
-
-            if (Array.isArray(smena.pacienti)) {
-              smena.pacienti.forEach(p => {
-                if (p.ulozeno) {
-                  const row = document.createElement("tr");
-                  row.innerHTML = `
-                    <td>${smena.od}</td>
-                    <td>${p.jmeno}</td>
-                    <td>${p.cas}</td>
-                    <td>${p.komentar}</td>
-                  `;
-                  tbody.appendChild(row);
-                }
-              });
-            }
-          });
-        });
-
-      // Načti žádosti
-      db.collection("zadosti")
-        .where("email", "==", user.email)
-        .get()
-        .then(snapshot => {
-          snapshot.forEach(doc => {
-            const zadost = doc.data();
-            const stav = zadost.stav || "čeká";
-            const typ = zadost.typ || "volno";
-
-            const startDate = new Date(zadost.od);
-            const endDate = new Date(zadost.do);
-            for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
-              const datum = d.toISOString().split("T")[0];
-              let color = "#999";
-              if (stav === "schváleno") color = "green";
-              else if (stav === "zamítnuto") color = "red";
-              else color = "#999";
-
-              calendar.addEvent({
-                title: `${typ} (${stav})`,
-                start: datum,
-                color: color
-              });
-            }
-          });
-        });
-    });
   </script>
+
+  <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/main.min.js'></script>
+  <script type="module" src="firebase.js"></script>
+  <script type="module" src="dashboard.js"></script>
 </body>
 </html>
