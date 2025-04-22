@@ -21,12 +21,30 @@
       text-decoration: none;
     }
 
+    .smeny-wrapper {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+    }
+
+    .smeny-column {
+      flex: 1 1 45%;
+      background-color: #f0f0f0;
+      padding: 15px;
+      border-radius: 10px;
+    }
+
+    .smeny-column h3 {
+      margin-top: 0;
+      color: #0057a0;
+    }
+
     .smena-box {
+      background-color: #ffffff;
       border: 1px solid #ccc;
       border-radius: 10px;
-      padding: 20px;
-      margin-bottom: 20px;
-      background-color: #e9f3ff;
+      padding: 10px;
+      margin-top: 10px;
     }
 
     .pacient-row {
@@ -37,10 +55,6 @@
       margin: 5px;
       padding: 5px;
       font-size: 16px;
-    }
-
-    .ulozeno {
-      background-color: #d4edda;
     }
   </style>
 </head>
@@ -53,7 +67,7 @@
   </nav>
 
   <h2>Úprava směn</h2>
-  <div id="smenyContainer"></div>
+  <div class="smeny-wrapper" id="smenyWrapper"></div>
 
   <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-auth-compat.js"></script>
@@ -74,8 +88,8 @@
     const db = firebase.firestore();
     const auth = firebase.auth();
 
-    const smenyContainer = document.getElementById("smenyContainer");
-    const pacienti = [];
+    const pacienti = ["Paseková", "Dragoun", "Žáková", "Chmarníková", "Drbohlavová"];
+    const smenyWrapper = document.getElementById("smenyWrapper");
 
     auth.onAuthStateChanged(user => {
       if (!user) {
@@ -84,119 +98,140 @@
         return;
       }
 
-      db.collection("pacienti").get().then(snapshot => {
-        snapshot.forEach(doc => pacienti.push(doc.data().jmeno));
-      }).then(() => {
-        db.collection("smeny").orderBy("od").get().then(snapshot => {
-          snapshot.forEach(doc => zobrazSmenu(doc));
+      db.collection("smeny").orderBy("od").get().then(snapshot => {
+        const podleEmailu = {};
+
+        snapshot.forEach(doc => {
+          const smena = doc.data();
+          smena.id = doc.id;
+
+          if (!podleEmailu[smena.email]) {
+            podleEmailu[smena.email] = [];
+          }
+          podleEmailu[smena.email].push(smena);
+        });
+
+        Object.entries(podleEmailu).forEach(([email, smeny]) => {
+          const column = document.createElement("div");
+          column.className = "smeny-column";
+
+          const heading = document.createElement("h3");
+          heading.textContent = email;
+          column.appendChild(heading);
+
+          smeny.forEach(smena => {
+            const smenaBox = document.createElement("div");
+            smenaBox.className = "smena-box";
+
+            const nadpis = document.createElement("h4");
+            nadpis.textContent = `Směna: ${smena.od}`;
+            smenaBox.appendChild(nadpis);
+
+            const pacientiDiv = document.createElement("div");
+
+            if (Array.isArray(smena.pacienti)) {
+              smena.pacienti.forEach((pacient, index) => {
+                if (pacient.ulozeno) {
+                  pacientiDiv.appendChild(
+                    vytvorPacientRadek(smena.id, index, pacient.jmeno, pacient.cas, pacient.komentar, pacient.ulozeno)
+                  );
+                }
+              });
+            }
+
+            const pridejBtn = document.createElement("button");
+            pridejBtn.textContent = "Přidat pacienta";
+            pridejBtn.addEventListener("click", () => {
+              pacientiDiv.appendChild(vytvorPacientRadek(smena.id, pacientiDiv.childElementCount));
+            });
+
+            smenaBox.appendChild(pacientiDiv);
+            smenaBox.appendChild(pridejBtn);
+            column.appendChild(smenaBox);
+          });
+
+          smenyWrapper.appendChild(column);
         });
       });
     });
 
-    function zobrazSmenu(doc) {
-      const smena = doc.data();
-      const smenaBox = document.createElement("div");
-      smenaBox.className = "smena-box";
-      if (smena.ulozeno) smenaBox.classList.add("ulozeno");
-
-      const nadpis = document.createElement('h3');
-      nadpis.textContent = `${smena.od} (${smena.email})`;
-      smenaBox.appendChild(nadpis);
-
-      const pacientiDiv = document.createElement("div");
-      if (Array.isArray(smena.pacienti)) {
-        smena.pacienti.forEach((p, i) => {
-          pacientiDiv.appendChild(vytvorRadek(doc.id, i, p.jmeno, p.cas, p.komentar, smena.ulozeno));
-        });
-      }
-
-      if (!smena.ulozeno) {
-        const pridejBtn = document.createElement("button");
-        pridejBtn.textContent = "Přidat pacienta";
-        pridejBtn.onclick = () => {
-          pacientiDiv.appendChild(vytvorRadek(doc.id, pacientiDiv.childElementCount, "", "", ""));
-        };
-        smenaBox.appendChild(pridejBtn);
-      }
-
-      smenaBox.appendChild(pacientiDiv);
-
-      if (!smena.ulozeno) {
-        const ulozitBtn = document.createElement("button");
-        ulozitBtn.textContent = "Uložit směnu";
-        ulozitBtn.onclick = () => {
-          db.collection("smeny").doc(doc.id).update({ ulozeno: true })
-            .then(() => location.reload());
-        };
-        smenaBox.appendChild(ulozitBtn);
-      }
-
-      smenyContainer.appendChild(smenaBox);
-    }
-
-    function vytvorRadek(docId, index, jmeno = "", cas = "", komentar = "", zamknuto = false) {
+    function vytvorPacientRadek(docId, index, vychoziJmeno = "", vychoziCas = "", vychoziKomentar = "", ulozeno = false) {
       const row = document.createElement("div");
       row.className = "pacient-row";
 
       const select = document.createElement("select");
-      pacienti.forEach(p => {
-        const opt = document.createElement("option");
-        opt.value = p;
-        opt.textContent = p;
-        if (p === jmeno) opt.selected = true;
-        select.appendChild(opt);
+      pacienti.forEach(jmeno => {
+        const option = document.createElement("option");
+        option.value = jmeno;
+        option.textContent = jmeno;
+        if (jmeno === vychoziJmeno) option.selected = true;
+        select.appendChild(option);
       });
 
       const time = document.createElement("input");
       time.type = "time";
-      time.value = cas;
+      time.value = vychoziCas;
 
-      const komentarInput = document.createElement("input");
-      komentarInput.type = "text";
-      komentarInput.placeholder = "Komentář";
-      komentarInput.value = komentar;
+      const komentar = document.createElement("input");
+      komentar.type = "text";
+      komentar.placeholder = "Komentář";
+      komentar.value = vychoziKomentar;
 
       const ulozit = document.createElement("button");
       ulozit.textContent = "Uložit";
-      ulozit.onclick = () => ulozPacienta(docId, index, select.value, time.value, komentarInput.value);
+      ulozit.addEventListener("click", () => {
+        ulozPacient(docId, index, select.value, time.value, komentar.value);
+        ulozit.disabled = true;
+      });
 
       const smazat = document.createElement("button");
       smazat.textContent = "Smazat";
-      smazat.onclick = () => smazPacienta(docId, index);
+      smazat.addEventListener("click", () => {
+        smazPacienta(docId, index, row);
+      });
 
-      if (zamknuto) {
+      if (ulozeno) {
         select.disabled = true;
         time.disabled = true;
-        komentarInput.disabled = true;
-        ulozit.disabled = true;
-        smazat.disabled = true;
+        komentar.disabled = true;
       }
 
       row.appendChild(select);
       row.appendChild(time);
-      row.appendChild(komentarInput);
+      row.appendChild(komentar);
       row.appendChild(ulozit);
       row.appendChild(smazat);
+
       return row;
     }
 
-    function ulozPacienta(docId, index, jmeno, cas, komentar) {
+    function ulozPacient(docId, index, jmeno, cas, komentar) {
       const docRef = db.collection("smeny").doc(docId);
       docRef.get().then(doc => {
-        const data = doc.data();
+        if (!doc.exists) return;
+
+        let data = doc.data();
         if (!Array.isArray(data.pacienti)) data.pacienti = [];
-        data.pacienti[index] = { jmeno, cas, komentar };
-        docRef.update({ pacienti: data.pacienti });
+
+        data.pacienti[index] = { jmeno, cas, komentar, ulozeno: true };
+        docRef.update({ pacienti: data.pacienti })
+          .then(() => alert("Uloženo"))
+          .catch(err => alert("Chyba při ukládání: " + err));
       });
     }
 
-    function smazPacienta(docId, index) {
+    function smazPacienta(docId, index, row) {
       const docRef = db.collection("smeny").doc(docId);
       docRef.get().then(doc => {
-        const data = doc.data();
+        if (!doc.exists) return;
+
+        let data = doc.data();
         if (!Array.isArray(data.pacienti)) return;
+
         data.pacienti.splice(index, 1);
-        docRef.update({ pacienti: data.pacienti }).then(() => location.reload());
+        docRef.update({ pacienti: data.pacienti })
+          .then(() => row.remove())
+          .catch(err => alert("Chyba při mazání: " + err));
       });
     }
   </script>
