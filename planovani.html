@@ -96,14 +96,13 @@
         selectable: true,
         select: function (info) {
           startDate = info.startStr;
-
-          const endForDisplay = new Date(info.end);
-          endForDisplay.setDate(endForDisplay.getDate() - 1);
           endDate = info.endStr;
 
-          const displayEndDate = endForDisplay.toISOString().split("T")[0];
+          // Zobraz správný rozsah (od–do) s odečtením dne jen pro zobrazení
+          const zobrazKonec = new Date(new Date(endDate).getTime() - 86400000)
+            .toISOString().split("T")[0];
 
-          document.getElementById("range").textContent = `${startDate} – ${displayEndDate}`;
+          document.getElementById("range").textContent = `${startDate} – ${zobrazKonec}`;
           document.getElementById("souhrn").innerHTML = "";
           document.getElementById("planovaniForm").style.display = "block";
         },
@@ -164,24 +163,24 @@
 
       calendar.render();
 
-      document.getElementById("emailSelect").addEventListener("change", () => {
+      document.getElementById("emailSelect").addEventListener("change", zobrazSouhrn);
+
+      function zobrazSouhrn() {
         const email = document.getElementById("emailSelect").value;
-        const displayEnd = new Date(endDate);
-        displayEnd.setDate(displayEnd.getDate() - 1);
+        const zobrazKonec = new Date(new Date(endDate).getTime() - 86400000).toISOString().split("T")[0];
         document.getElementById("souhrn").innerHTML = `
           <p><strong>Sestra:</strong> ${email}</p>
           <p><strong>Od:</strong> ${startDate}</p>
-          <p><strong>Do:</strong> ${displayEnd.toISOString().split("T")[0]}</p>
+          <p><strong>Do:</strong> ${zobrazKonec}</p>
         `;
-      });
+      }
 
       document.getElementById("potvrditBtn").addEventListener("click", async () => {
         const email = document.getElementById("emailSelect").value;
         const current = new Date(startDate);
-        const end = new Date(endDate);
-        end.setDate(end.getDate() - 1); // opravdu ukládáme do předchozího dne včetně
+        const end = new Date(endDate); // tady už se nic neodečítá
 
-        while (current <= end) {
+        while (current < end) {
           const datum = current.toISOString().split("T")[0];
           await db.collection("smeny").add({ email, od: datum });
           current.setDate(current.getDate() + 1);
