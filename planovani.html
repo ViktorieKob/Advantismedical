@@ -84,8 +84,6 @@
     const db = firebase.firestore();
     const auth = firebase.auth();
 
-    let startDate = null;
-    let endDate = null;
     let calendar = null;
 
     document.addEventListener("DOMContentLoaded", function () {
@@ -95,14 +93,17 @@
         initialView: "dayGridMonth",
         selectable: true,
         select: function (info) {
-          startDate = info.startStr;
-          endDate = info.endStr;
+          const start = new Date(info.startStr);
+          const end = new Date(info.endStr);
+          const days = [];
 
-          // Zobraz správný rozsah (od–do) s odečtením dne jen pro zobrazení
-          const zobrazKonec = new Date(new Date(endDate).getTime() - 86400000)
-            .toISOString().split("T")[0];
+          while (start < end) {
+            days.push(start.toISOString().split("T")[0]);
+            start.setDate(start.getDate() + 1);
+          }
 
-          document.getElementById("range").textContent = `${startDate} – ${zobrazKonec}`;
+          document.getElementById("range").textContent = `${days[0]} – ${days[days.length - 1]}`;
+          document.getElementById("planovaniForm").dataset.days = JSON.stringify(days);
           document.getElementById("souhrn").innerHTML = "";
           document.getElementById("planovaniForm").style.display = "block";
         },
@@ -167,23 +168,20 @@
 
       function zobrazSouhrn() {
         const email = document.getElementById("emailSelect").value;
-        const zobrazKonec = new Date(new Date(endDate).getTime() - 86400000).toISOString().split("T")[0];
+        const days = JSON.parse(document.getElementById("planovaniForm").dataset.days);
         document.getElementById("souhrn").innerHTML = `
           <p><strong>Sestra:</strong> ${email}</p>
-          <p><strong>Od:</strong> ${startDate}</p>
-          <p><strong>Do:</strong> ${zobrazKonec}</p>
+          <p><strong>Od:</strong> ${days[0]}</p>
+          <p><strong>Do:</strong> ${days[days.length - 1]}</p>
         `;
       }
 
       document.getElementById("potvrditBtn").addEventListener("click", async () => {
         const email = document.getElementById("emailSelect").value;
-        const current = new Date(startDate);
-        const end = new Date(endDate); // tady už se nic neodečítá
+        const days = JSON.parse(document.getElementById("planovaniForm").dataset.days);
 
-        while (current < end) {
-          const datum = current.toISOString().split("T")[0];
-          await db.collection("smeny").add({ email, od: datum });
-          current.setDate(current.getDate() + 1);
+        for (const day of days) {
+          await db.collection("smeny").add({ email, od: day });
         }
 
         alert("Směny přiřazeny.");
