@@ -29,6 +29,16 @@
       padding: 10px;
       border-radius: 10px;
     }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 30px;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 8px;
+      text-align: left;
+    }
   </style>
 </head>
 <body>
@@ -42,6 +52,19 @@
   <h1>Dashboard</h1>
   <div id="calendar"></div>
   <div id="smenyDetail"></div>
+
+  <h3>Seznam naplánovaných pacientů</h3>
+  <table id="tabulkaPacientu">
+    <thead>
+      <tr>
+        <th>Datum</th>
+        <th>Pacient</th>
+        <th>Čas</th>
+        <th>Komentář</th>
+      </tr>
+    </thead>
+    <tbody id="pacientiBody"></tbody>
+  </table>
 
   <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
@@ -72,6 +95,8 @@
 
       const calendarEl = document.getElementById("calendar");
       const detailEl = document.getElementById("smenyDetail");
+      const tbody = document.getElementById("pacientiBody");
+
       const calendar = new FullCalendar.Calendar(calendarEl, {
         initialView: "dayGridMonth",
         locale: "cs",
@@ -116,7 +141,7 @@
 
       // Načti směny do kalendáře
       db.collection("smeny")
-        .where("email", "==", auth.currentUser.email)
+        .where("email", "==", user.email)
         .get()
         .then(snapshot => {
           snapshot.forEach(doc => {
@@ -126,6 +151,21 @@
               start: smena.od,
               color: "#007bff"
             });
+
+            if (Array.isArray(smena.pacienti)) {
+              smena.pacienti.forEach(p => {
+                if (p.ulozeno) {
+                  const row = document.createElement("tr");
+                  row.innerHTML = `
+                    <td>${smena.od}</td>
+                    <td>${p.jmeno}</td>
+                    <td>${p.cas}</td>
+                    <td>${p.komentar}</td>
+                  `;
+                  tbody.appendChild(row);
+                }
+              });
+            }
           });
         });
     });
