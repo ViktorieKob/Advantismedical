@@ -10,24 +10,29 @@
       font-family: sans-serif;
       padding: 20px;
     }
+
     nav {
       background-color: #0057a0;
       padding: 10px;
       margin: -20px -20px 20px -20px;
     }
+
     nav a {
       color: white;
       margin-right: 20px;
       text-decoration: none;
     }
+
     #calendar {
       max-width: 900px;
       margin: 0 auto;
     }
+
     .modal {
       text-align: center;
       margin-top: 20px;
     }
+
     select, button {
       padding: 10px;
       font-size: 16px;
@@ -42,8 +47,10 @@
     <a href="planovani.html">Plánování směn</a>
     <a href="smeny.html">Úprava směn</a>
   </nav>
+
   <h2>Plánování směn</h2>
   <div id="calendar"></div>
+
   <div class="modal" id="planovaniForm" style="display: none;">
     <h3>Vybrané dny: <span id="range"></span></h3>
     <label for="emailSelect">Vyber sestru:</label>
@@ -89,7 +96,8 @@
         selectable: true,
         select: function (info) {
           startDate = info.startStr;
-          endDate = new Date(info.end.getTime() - 1);
+          endDate = new Date(info.end);
+          endDate.setDate(endDate.getDate() - 1);
           endDate = endDate.toISOString().split("T")[0];
 
           document.getElementById("range").textContent = `${startDate} – ${endDate}`;
@@ -117,7 +125,7 @@
           const smenySnap = await db.collection("smeny").get();
           smenySnap.forEach(doc => {
             const d = doc.data();
-            if (d.od && d.do && d.email) {
+            if (d.od && d.email) {
               let barva = "#007bff";
               if (d.email === "druhasestra@test.cz") barva = "#6f42c1";
               else if (d.email === "treti@test.cz") barva = "#20c997";
@@ -127,7 +135,6 @@
                 id: doc.id,
                 title: `Směna – ${d.email}`,
                 start: d.od,
-                end: new Date(new Date(d.do).getTime() + 86400000).toISOString().split('T')[0],
                 color: barva,
                 typ: "smena"
               });
@@ -154,9 +161,7 @@
 
       calendar.render();
 
-      document.getElementById("emailSelect").addEventListener("change", () => {
-        zobrazSouhrn();
-      });
+      document.getElementById("emailSelect").addEventListener("change", zobrazSouhrn);
 
       function zobrazSouhrn() {
         const email = document.getElementById("emailSelect").value;
@@ -169,13 +174,16 @@
 
       document.getElementById("potvrditBtn").addEventListener("click", async () => {
         const email = document.getElementById("emailSelect").value;
-        await db.collection("smeny").add({
-          email: email,
-          od: startDate,
-          do: endDate
-        });
+        const current = new Date(startDate);
+        const end = new Date(endDate);
 
-        alert("Směna přiřazena.");
+        while (current <= end) {
+          const datum = current.toISOString().split("T")[0];
+          await db.collection("smeny").add({ email, od: datum });
+          current.setDate(current.getDate() + 1);
+        }
+
+        alert("Směny přiřazeny.");
         document.getElementById("planovaniForm").style.display = "none";
         calendar.refetchEvents();
       });
