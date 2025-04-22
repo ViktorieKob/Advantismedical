@@ -10,29 +10,24 @@
       font-family: sans-serif;
       padding: 20px;
     }
-
     nav {
       background-color: #0057a0;
       padding: 10px;
       margin: -20px -20px 20px -20px;
     }
-
     nav a {
       color: white;
       margin-right: 20px;
       text-decoration: none;
     }
-
     #calendar {
       max-width: 900px;
       margin: 0 auto;
     }
-
     .modal {
       text-align: center;
       margin-top: 20px;
     }
-
     select, button {
       padding: 10px;
       font-size: 16px;
@@ -121,7 +116,6 @@
         },
         events: async function(fetchInfo, successCallback) {
           const events = [];
-
           const smenySnap = await db.collection("smeny").get();
           smenySnap.forEach(doc => {
             const d = doc.data();
@@ -174,13 +168,13 @@
 
       document.getElementById("potvrditBtn").addEventListener("click", async () => {
         const email = document.getElementById("emailSelect").value;
-        const current = new Date(startDate);
+        const start = new Date(startDate);
         const end = new Date(endDate);
 
-        while (current <= end) {
-          const datum = current.toISOString().split("T")[0];
-          await db.collection("smeny").add({ email, od: datum });
-          current.setDate(current.getDate() + 1);
+        while (start <= end) {
+          const den = start.toISOString().split("T")[0];
+          await db.collection("smeny").add({ email, od: den });
+          start.setDate(start.getDate() + 1);
         }
 
         alert("Směny přiřazeny.");
