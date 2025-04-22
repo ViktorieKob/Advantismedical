@@ -23,7 +23,7 @@
       max-width: 900px;
       margin: 0 auto;
     }
-    .detail-box, .zadost-box {
+    .detail-box {
       background-color: #f0f0f0;
       margin-top: 20px;
       padding: 10px;
@@ -39,16 +39,6 @@
       padding: 8px;
       text-align: left;
     }
-    select, button {
-      font-size: 16px;
-      padding: 5px 10px;
-      margin-right: 10px;
-    }
-    @media (hover: none) and (pointer: coarse) {
-      .fc-daygrid-day {
-        touch-action: manipulation;
-      }
-    }
   </style>
 </head>
 <body>
@@ -61,7 +51,6 @@
 
   <h1>Dashboard</h1>
   <div id="calendar"></div>
-  <div id="zadostBox" class="zadost-box" style="display:none;"></div>
   <div id="smenyDetail"></div>
 
   <h3>Seznam naplánovaných pacientů</h3>
@@ -104,35 +93,13 @@
         return;
       }
 
-      let startDate = null;
-      let endDate = null;
-
       const calendarEl = document.getElementById("calendar");
       const detailEl = document.getElementById("smenyDetail");
-      const zadostBox = document.getElementById("zadostBox");
       const tbody = document.getElementById("pacientiBody");
 
       const calendar = new FullCalendar.Calendar(calendarEl, {
         initialView: "dayGridMonth",
         locale: "cs",
-        selectable: true,
-        select: function(info) {
-          startDate = info.startStr;
-          const end = new Date(info.end);
-          end.setDate(end.getDate() - 1);
-          endDate = end.toISOString().split("T")[0];
-
-          zadostBox.style.display = "block";
-          zadostBox.innerHTML = `
-            <h4>Žádost o volno</h4>
-            <p>Od ${startDate} do ${endDate}</p>
-            <select id="typVolna">
-              <option value="Dovolená">Dovolená</option>
-              <option value="Neplacené volno">Neplacené volno</option>
-            </select>
-            <button onclick="odesliZadost('${startDate}', '${endDate}', '${user.email}')">Požádat</button>
-          `;
-        },
         headerToolbar: {
           left: "title",
           center: "",
@@ -151,10 +118,12 @@
           .where("email", "==", email)
           .get()
           .then(snapshot => {
-            const data = snapshot.docs.map(doc => doc.data()).filter(smena => smena.od === datum);
+            const data = snapshot.docs
+              .map(doc => doc.data())
+              .filter(smena => smena.od === datum);
             let html = "";
             if (data.length) {
-              html += `<div class="detail-box"><h3>${datum.split("-").reverse().join(". ")}</h3>`;
+              html += `<div class="detail-box"><h3>${datum.split("-").reverse().join(". ")}.</h3>`;
               data.forEach(smena => {
                 (smena.pacienti || []).forEach(p => {
                   if (p.jmeno && p.cas && p.komentar) {
@@ -170,6 +139,7 @@
           });
       }
 
+      // Načti směny
       db.collection("smeny")
         .where("email", "==", user.email)
         .get()
@@ -198,21 +168,35 @@
             }
           });
         });
-    });
 
-    function odesliZadost(od, doDatum, email) {
-      const typ = document.getElementById("typVolna").value;
-      firebase.firestore().collection("zadosti").add({
-        od,
-        do: doDatum,
-        email,
-        typ,
-        stav: "čeká"
-      }).then(() => {
-        alert("Žádost byla odeslána.");
-        document.getElementById("zadostBox").style.display = "none";
-      });
-    }
+      // Načti žádosti
+      db.collection("zadosti")
+        .where("email", "==", user.email)
+        .get()
+        .then(snapshot => {
+          snapshot.forEach(doc => {
+            const zadost = doc.data();
+            const stav = zadost.stav || "čeká";
+            const typ = zadost.typ || "volno";
+
+            const startDate = new Date(zadost.od);
+            const endDate = new Date(zadost.do);
+            for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+              const datum = d.toISOString().split("T")[0];
+              let color = "#999";
+              if (stav === "schváleno") color = "green";
+              else if (stav === "zamítnuto") color = "red";
+              else color = "#999";
+
+              calendar.addEvent({
+                title: `${typ} (${stav})`,
+                start: datum,
+                color: color
+              });
+            }
+          });
+        });
+    });
   </script>
 </body>
 </html>
