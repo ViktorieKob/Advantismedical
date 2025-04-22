@@ -1,46 +1,39 @@
 <!DOCTYPE html>
 <html lang="cs">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Úprava směn</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
   <style>
     body {
       font-family: sans-serif;
       padding: 20px;
     }
-
     nav {
       background-color: #0057a0;
       padding: 10px;
       margin: -20px -20px 20px -20px;
     }
-
     nav a {
       color: white;
       margin-right: 20px;
       text-decoration: none;
     }
-
     .smena-box {
-      border: 1px solid #ccc;
-      border-radius: 10px;
-      padding: 20px;
-      margin-bottom: 20px;
-      background-color: #e9f3ff;
+      background-color: #f8f9fa;
+      border: 1px solid #dee2e6;
+      border-radius: 5px;
+      padding: 15px;
+      margin-bottom: 10px;
     }
-
-    .pacient-row {
-      margin-top: 10px;
-    }
-
-    select, input[type="time"], input[type="text"], button {
-      margin: 5px;
-      padding: 5px;
-      font-size: 16px;
-    }
-
-    .ulozeno {
-      background-color: #d4edda;
+    .history-header {
+      background-color: #e9ecef;
+      border: 1px solid #ced4da;
+      padding: 10px;
+      margin-top: 30px;
+      font-weight: bold;
+      text-align: center;
     }
   </style>
 </head>
@@ -51,154 +44,74 @@
     <a href="planovani.html">Plánování směn</a>
     <a href="smeny.html">Úprava směn</a>
   </nav>
-
-  <h2>Úprava směn</h2>
-  <div id="smenyContainer"></div>
-
+  <div class="container">
+    <h2>Úprava směn</h2>
+    <div class="row" id="smenyContainer"></div>
+    <div class="history-header">Historie směn</div>
+    <div class="row" id="historieContainer"></div>
+  </div>
   <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore-compat.js"></script>
-
   <script>
     const firebaseConfig = {
       apiKey: "AIzaSyD4j1bO7JDbzUM-ca4AWUSkGYpmglWK_IQ",
       authDomain: "dochazka-app.firebaseapp.com",
       projectId: "dochazka-app",
-      storageBucket: "dochazka-app.appspot.com",
-      messagingSenderId: "912220280247",
-      appId: "1:912220280247:web:e0b27491b9234cba984432",
-      measurementId: "G-G8PPKTK907"
     };
-
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
-    const auth = firebase.auth();
 
     const smenyContainer = document.getElementById("smenyContainer");
-    const pacienti = [];
+    const historieContainer = document.getElementById("historieContainer");
 
-    auth.onAuthStateChanged(user => {
-      if (!user) {
-        alert("Přístup pouze pro přihlášené uživatele.");
-        window.location.href = "index.html";
-        return;
-      }
+    const dnes = new Date();
+    dnes.setHours(0,0,0,0);
 
-      db.collection("pacienti").get().then(snapshot => {
-        snapshot.forEach(doc => pacienti.push(doc.data().jmeno));
-      }).then(() => {
-        db.collection("smeny").orderBy("od").get().then(snapshot => {
-          snapshot.forEach(doc => zobrazSmenu(doc));
-        });
+    db.collection("smeny").orderBy("od").get().then(snapshot => {
+      const smeny = {};
+      const historie = {};
+
+      snapshot.forEach(doc => {
+        const data = doc.data();
+        const email = data.email;
+        const datum = data.od;
+        const datumDate = new Date(datum);
+
+        const cilova = datumDate < dnes ? historie : smeny;
+
+        if (!cilova[email]) cilova[email] = [];
+        cilova[email].push({ datum, id: doc.id });
       });
+
+      const renderSekce = (data, container) => {
+        Object.keys(data).forEach(email => {
+          const col = document.createElement("div");
+          col.className = "col-md-6 mb-4";
+          const card = document.createElement("div");
+          card.className = "smena-box";
+          const nadpis = document.createElement("h5");
+          nadpis.textContent = email;
+          card.appendChild(nadpis);
+
+          data[email].forEach(smena => {
+            const p = document.createElement("p");
+            p.innerHTML = `<strong>Směna:</strong> ${smena.datum}`;
+            const btn = document.createElement("button");
+            btn.textContent = "Přidat pacienta";
+            btn.className = "btn btn-sm btn-outline-primary ms-2";
+            btn.onclick = () => alert(`Přidání pacienta pro směnu ${smena.datum}`);
+            card.appendChild(p);
+            card.appendChild(btn);
+          });
+
+          col.appendChild(card);
+          container.appendChild(col);
+        });
+      };
+
+      renderSekce(smeny, smenyContainer);
+      renderSekce(historie, historieContainer);
     });
-
-    function zobrazSmenu(doc) {
-      const smena = doc.data();
-      const smenaBox = document.createElement("div");
-      smenaBox.className = "smena-box";
-      if (smena.ulozeno) smenaBox.classList.add("ulozeno");
-
-      const nadpis = document.createElement('h3');
-      nadpis.textContent = `${smena.od} (${smena.email})`;
-      smenaBox.appendChild(nadpis);
-
-      const pacientiDiv = document.createElement("div");
-      if (Array.isArray(smena.pacienti)) {
-        smena.pacienti.forEach((p, i) => {
-          pacientiDiv.appendChild(vytvorRadek(doc.id, i, p.jmeno, p.cas, p.komentar, smena.ulozeno));
-        });
-      }
-
-      if (!smena.ulozeno) {
-        const pridejBtn = document.createElement("button");
-        pridejBtn.textContent = "Přidat pacienta";
-        pridejBtn.onclick = () => {
-          pacientiDiv.appendChild(vytvorRadek(doc.id, pacientiDiv.childElementCount, "", "", ""));
-        };
-        smenaBox.appendChild(pridejBtn);
-      }
-
-      smenaBox.appendChild(pacientiDiv);
-
-      if (!smena.ulozeno) {
-        const ulozitBtn = document.createElement("button");
-        ulozitBtn.textContent = "Uložit směnu";
-        ulozitBtn.onclick = () => {
-          db.collection("smeny").doc(doc.id).update({ ulozeno: true })
-            .then(() => location.reload());
-        };
-        smenaBox.appendChild(ulozitBtn);
-      }
-
-      smenyContainer.appendChild(smenaBox);
-    }
-
-    function vytvorRadek(docId, index, jmeno = "", cas = "", komentar = "", zamknuto = false) {
-      const row = document.createElement("div");
-      row.className = "pacient-row";
-
-      const select = document.createElement("select");
-      pacienti.forEach(p => {
-        const opt = document.createElement("option");
-        opt.value = p;
-        opt.textContent = p;
-        if (p === jmeno) opt.selected = true;
-        select.appendChild(opt);
-      });
-
-      const time = document.createElement("input");
-      time.type = "time";
-      time.value = cas;
-
-      const komentarInput = document.createElement("input");
-      komentarInput.type = "text";
-      komentarInput.placeholder = "Komentář";
-      komentarInput.value = komentar;
-
-      const ulozit = document.createElement("button");
-      ulozit.textContent = "Uložit";
-      ulozit.onclick = () => ulozPacienta(docId, index, select.value, time.value, komentarInput.value);
-
-      const smazat = document.createElement("button");
-      smazat.textContent = "Smazat";
-      smazat.onclick = () => smazPacienta(docId, index);
-
-      if (zamknuto) {
-        select.disabled = true;
-        time.disabled = true;
-        komentarInput.disabled = true;
-        ulozit.disabled = true;
-        smazat.disabled = true;
-      }
-
-      row.appendChild(select);
-      row.appendChild(time);
-      row.appendChild(komentarInput);
-      row.appendChild(ulozit);
-      row.appendChild(smazat);
-      return row;
-    }
-
-    function ulozPacienta(docId, index, jmeno, cas, komentar) {
-      const docRef = db.collection("smeny").doc(docId);
-      docRef.get().then(doc => {
-        const data = doc.data();
-        if (!Array.isArray(data.pacienti)) data.pacienti = [];
-        data.pacienti[index] = { jmeno, cas, komentar };
-        docRef.update({ pacienti: data.pacienti });
-      });
-    }
-
-    function smazPacienta(docId, index) {
-      const docRef = db.collection("smeny").doc(docId);
-      docRef.get().then(doc => {
-        const data = doc.data();
-        if (!Array.isArray(data.pacienti)) return;
-        data.pacienti.splice(index, 1);
-        docRef.update({ pacienti: data.pacienti }).then(() => location.reload());
-      });
-    }
   </script>
 </body>
 </html>
