@@ -5,9 +5,11 @@
   <title>Žádosti o volno</title>
   <style>
     body { font-family: sans-serif; padding: 20px; }
-    table { width: 100%; border-collapse: collapse; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
     th, td { padding: 10px; border: 1px solid #ccc; text-align: center; }
     button { padding: 6px 12px; margin: 0 5px; }
+    .sekce-historie { margin-top: 40px; padding: 10px; background-color: #f5f5f5; border: 2px solid #ccc; }
+    .sekce-historie h3 { margin-top: 0; }
   </style>
 </head>
 <body>
@@ -33,6 +35,23 @@
     <tbody></tbody>
   </table>
 
+  <div class="sekce-historie">
+    <h3>Historie žádostí</h3>
+    <table id="historieTable">
+      <thead>
+        <tr>
+          <th>Email</th>
+          <th>Od</th>
+          <th>Do</th>
+          <th>Typ</th>
+          <th>Stav</th>
+          <th>Akce</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
   <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-auth-compat.js"></script>
@@ -53,22 +72,18 @@
     const auth = firebase.auth();
 
     const tbody = document.querySelector('#zadostiTable tbody');
+    const historieBody = document.querySelector('#historieTable tbody');
 
     function nactiZadosti() {
       db.collection("zadosti").get().then(snapshot => {
         tbody.innerHTML = '';
+        historieBody.innerHTML = '';
+
         snapshot.forEach(doc => {
           const zadost = doc.data();
-
           const stav = zadost.stav || '—';
-          const trClass =
-            stav === "schváleno" ? "radek-schvaleno" :
-            stav === "zamítnuto" ? "radek-zamitnuto" :
-            "radek-ceka";
 
           const tr = document.createElement('tr');
-          tr.className = trClass;
-
           tr.innerHTML = `
             <td>${zadost.email || ''}</td>
             <td>${zadost.od || '—'}</td>
@@ -81,7 +96,12 @@
               <button onclick="smazatZadost('${doc.id}')">Smazat</button>
             </td>
           `;
-          tbody.appendChild(tr);
+
+          if (stav === 'schváleno' || stav === 'zamítnuto') {
+            historieBody.appendChild(tr);
+          } else {
+            tbody.appendChild(tr);
+          }
         });
       });
     }
